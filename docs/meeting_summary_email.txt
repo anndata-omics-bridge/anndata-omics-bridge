@@ -1,0 +1,63 @@
+Meeting Summary: Column Annotation Strategy for Multi-Assay Containers
+
+Date: 2025-10-02
+Topic: SE/AnnData format specification and column naming conventions
+
+================================================================================
+
+Background: SummarizedExperiment vs AnnData
+
+Key Points about AnnData:
+- Compatible with both Python and R ecosystems
+- Native support for spatial and single-cell data
+- Potential future native support in exploreDE
+
+================================================================================
+
+Main Discussion: Column Naming Conventions
+
+We evaluated two approaches for annotating columns in multi-assay containers (var/varm and obs/obsm):
+
+
+Option 1: Use <role>__<name> Column Name Pattern
+
+Description: Encode semantic information directly in column names using a prefix pattern (e.g., factor_treatment, label_gene_symbol, effect_log2fc)
+
+Pros:
+- Improves readability – Column names clearly indicate their purpose (e.g., which columns are part of experimental design)
+- Already established – Currently used in sushi/exploreDE (e.g., factor_ prefix)
+- Simple implementation – Straightforward pattern: <role>__<name>
+- Self-documenting – Column semantics are immediately visible
+
+Cons:
+- Reduces generality – Instead of making exploreDE fully generic, it relies on a specific SE/AnnData format
+- Longer column names – Can become unwieldy in displays
+- UI confusion – If prefix <role> is removed to save screen space in exploreDE, the mapping between UI and AnnData becomes unclear
+- Potential conflicts – A column might have role "label" for exploreDE but role "score" for a different application
+
+
+Option 2: Store Column Annotations in uns/metadata
+
+Description: Keep column names clean and store semantic information separately in the metadata/uns section
+
+Pros:
+- Necessary anyway – Metadata must be used for other information (e.g., DE analysis details)
+- Avoids conflicts – Different applications (DE application vs exploreDE) can define their own column role mappings independently
+- Cleaner column names – No prefix clutter in actual data columns
+
+Cons:
+- Multiple implementation options – Many ways to structure this metadata, leading to inconsistency
+- Error-prone – Requires careful coordination between data structure and metadata
+- Less discoverable – Semantic information not immediately visible when inspecting columns
+
+================================================================================
+
+Open Questions:
+- How to balance simplicity (column prefixes) with flexibility (metadata annotations)?
+- Should we define a hybrid approach?
+- What is the priority: ease of data creation vs ease of tool interoperability?
+
+================================================================================
+
+Next Steps:
+[To be discussed in follow-up]
