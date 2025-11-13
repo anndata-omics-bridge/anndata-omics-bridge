@@ -849,7 +849,7 @@ for (key in names(adata$uns$exploreDE$de_tests)) {
 
 Each tool should provide a validator to check if an AnnData object meets its requirements. The validator verifies the structure and metadata needed for the tool to function correctly.
 
-**Implementation**: See `src/validator.py` for a reference implementation.
+**Implementation**: See `src/omicsbridge/validator.py` for a reference implementation.
 
 ### What the Validator Checks
 
@@ -867,8 +867,8 @@ The validator performs these checks:
 ```{python}
 #| eval: false
 
-# Import the validator (implementation in src/validator.py)
-from src.validator import validate_anndata_omics
+# Import the validator (implementation in src/omicsbridge/validator.py)
+from omicsbridge.validator import validate_anndata_omics
 
 # Validate an AnnData object
 result = validate_anndata_omics(adata, app_name='exploreDE')
@@ -1038,7 +1038,7 @@ cat(sprintf("Hierarchy columns: %s\n", paste(unlist(adata_peptide$uns$prolfqua$h
 
 The `ColumnResolver` class abstracts away column name differences, allowing tools to access data by **semantic role** rather than hard-coded column names. This enables tools to work with data from any source (*MaxQuant*, *DESeq2*, *Spectronaut*, etc.) without modification.
 
-**Implementation**: See `src/column_resolver.py` (Python) and `src/column_resolver.R` (R) for the full implementation.
+**Implementation**: See `src/omicsbridge/column_resolver.py` (Python) and `docs/R/column_resolver.R` (R) for the full implementation.
 
 **Key Methods**:
 
@@ -1054,8 +1054,8 @@ The `ColumnResolver` class abstracts away column name differences, allowing tool
 ```{python}
 #| eval: false
 
-# Import the ColumnResolver (implementation in src/column_resolver.py)
-from src.column_resolver import ColumnResolver
+# Import the ColumnResolver (implementation in src/omicsbridge/column_resolver.py)
+from omicsbridge.column_resolver import ColumnResolver
 
 # Create resolver for an AnnData object
 resolver = ColumnResolver(adata, app_name='exploreDE')
@@ -1078,8 +1078,8 @@ print(f"Volcano plot Y-axis: {pval_cols[0]}")  # Might be 'pvalue', 'padj', 'FDR
 ```{r}
 #| eval: false
 
-# Source the ColumnResolver (implementation in src/column_resolver.R)
-source('src/column_resolver.R')
+# Source the ColumnResolver (implementation in docs/R/column_resolver.R)
+source('R/column_resolver.R')
 
 # Create resolver for an AnnData object
 resolver <- ColumnResolver$new(adata, app_name = 'exploreDE')
