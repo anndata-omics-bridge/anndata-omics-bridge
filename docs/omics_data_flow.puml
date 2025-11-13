@@ -1,0 +1,17 @@
+@startuml
+title Omics Data Processing Flow
+
+start
+:Import vendor outputs\n(Spectronaut, DIA-NN, alphaDIA, MaxQuant, FragPipe,\n mzmine, Compound Discoverer, ...);
+:Convert to multi-assay container\n(SummarizedExperiment or AnnData)\nNormalize and Decorate names;
+:Augment with differential expression results\nAdd t-SNE/UMAP/PCA/clustering results (varm);
+:Augment with gene set enrichment\nand ORA/GSEA results (uns);
+split
+  :Visualize e.g. exploreDE, Scanpy, cellxgene;
+split again
+  :export to Excel, TSV, CSV etc.;
+end split
+stop
+
+@enduml
+

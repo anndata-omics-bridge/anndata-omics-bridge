@@ -10,16 +10,22 @@ format:
     toc: true
     toc-depth: 3
     number-sections: true
-  pdf:
+    code-fold: false
+    embed-resources: true
+  docx:
     toc: true
     toc-depth: 3
     number-sections: true
-    geometry: margin=1in
-    documentclass: article
-    fontsize: 11pt
-    colorlinks: true
-    tbl-cap-location: top
-    fig-pos: 'H'
+  # pdf:  # Uncomment if you install TinyTeX with: quarto install tinytex
+  #   toc: true
+  #   toc-depth: 3
+  #   number-sections: true
+  #   geometry: margin=1in
+  #   documentclass: article
+  #   fontsize: 11pt
+  #   colorlinks: true
+  #   tbl-cap-location: top
+  #   fig-pos: 'H'
 editor:
   markdown:
     wrap: 72
@@ -95,7 +101,7 @@ AnnData components:
 
 **Example: Creating a minimal AnnData object**
 
-```python
+```{python}
 import anndata as ad
 import numpy as np
 import pandas as pd
@@ -170,7 +176,7 @@ This approach allows visualization tools to automatically select appropriate sca
 
 **Example: Adding multiple data layers**
 
-```python
+```{python}
 # Store raw intensities in a layer
 adata.layers['intensities'] = adata.X.copy()
 
@@ -219,7 +225,7 @@ The description column is used to store free-text description of the feature e.g
 
 **Example: Adding feature annotations**
 
-```python
+```{python}
 # Add additional protein annotations
 adata.var['label_uniprot_id'] = [f'UNI{i:05d}' for i in range(adata.n_vars)]
 adata.var['label_nr_peptides'] = np.random.randint(2, 50, adata.n_vars)
@@ -255,7 +261,7 @@ Store hierarchy definition in `adata.uns['hierarchy_definition'] = ['protein', '
 
 **Example: Creating hierarchical peptide-level data**
 
-```python
+```{python}
 # Create peptide-level AnnData (multiple peptides per protein)
 n_peptides = 200
 peptide_intensities = np.random.lognormal(mean=8, sigma=2, size=(100, n_peptides))
@@ -345,7 +351,7 @@ For each DE test, the following information should be stored in `adata.uns['de_t
 
 **Example: Storing DE results in varm**
 
-```python
+```{python}
 # Simulate differential expression analysis results
 de_results = pd.DataFrame({
     'effect_log2FC': np.random.randn(adata.n_vars),
@@ -401,7 +407,7 @@ TODO: How to accommodate different sample types: e.g. QC samples, and differenti
 
 **Example: Adding sample annotations and factors**
 
-```python
+```{python}
 # Add additional sample-level metadata
 adata.obs['label_total_intensity'] = adata.X.sum(axis=1)
 adata.obs['label_n_proteins_detected'] = (adata.X > 0).sum(axis=1)
@@ -424,7 +430,7 @@ Unstructured metadata stored in `adata.uns`
 
 **Example: Storing metadata in uns**
 
-```python
+```{python}
 # Store global experiment metadata
 adata.uns['experiment_info'] = {
     'date': '2025-11-12',
@@ -526,7 +532,7 @@ The validation function should return a structure with:
 
 **Example: Basic validation checks**
 
-```python
+```{python}
 def validate_anndata_omics(adata):
     """Validate AnnData object against omics specification."""
     errors = []
@@ -588,7 +594,7 @@ The standard format for AnnData is HDF5-based `.h5ad` files, which efficiently s
 
 **Example: File I/O**
 
-```python
+```{python}
 # Save AnnData object
 adata.write('proteomics_experiment.h5ad')
 

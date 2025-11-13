@@ -151,3 +151,35 @@ uv.lock
 # OS
 .DS_Store
 Thumbs.db
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# Quarto/Document outputs (keep source .qmd, ignore rendered files)
+docs/*.html
+docs/*.docx
+docs/*.pdf
+docs/*.tex
+docs/*_cache/
+docs/*_files/
+docs/*.knit.md
+.quarto/
+_site/
+
+# Exception: Keep intentional assets
+!docs/omics_data_flow.png
+!docs/omics_data_flow.svg
+
+# Data files (typically large, should be regenerated)
+*.h5ad
+*.rds
+
+# Temporary Office files
+~$*.docx
+~$*.xlsx
+
+# Ruff cache
+.ruff_cache/

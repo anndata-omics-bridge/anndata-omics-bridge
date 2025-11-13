@@ -1,10 +1,82 @@
+# ==============================================================================
+# Setup Instructions using uv (recommended)
+# ==============================================================================
+# 
+# 1. Install uv (if not already installed):
+#    # or on macOS: brew install uv
+#
+# 2. Create virtual environment and install package:
+#    uv venv
+#    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+#    uv pip install -e .
+#
+# 3. Install with development dependencies:
+#    uv pip install -e ".[dev]"
+#
+# 4. Sync all dependencies (keeps venv in sync with pyproject.toml):
+#    uv pip sync
+#
+# ==============================================================================
+# Development Tools - What They Do
+# ==============================================================================
+#
+# ruff: Fast Python linter (finds bugs, style issues, unused imports)
+#   - Catches common errors before runtime (undefined variables, syntax issues)
+#   - Enforces code style (line length, import ordering, naming conventions)
+#   - READS CONFIG from [tool.ruff] below (line length, which rules to check)
+#
+# mypy: Static type checker (catches type mismatches)
+#   - Finds bugs like: passing string to function expecting int
+#   - READS CONFIG from [tool.mypy] below (strictness level, Python version)
+#   - Requires type hints in your code: def func(x: int) -> str:
+#
+# pytest: Test runner (executes your test_*.py files)
+#   - Runs all test functions, reports pass/fail
+#   - READS CONFIG from [tool.pytest.ini_options] below (where to find tests)
+#
+# black: Code formatter (makes code look consistent)
+#   - Auto-formats to match team style (no debates about spacing!)
+#   - READS CONFIG from [tool.black] below (line length, Python version)
+#
+# ==============================================================================
+# Development Tools - Usage Examples
+# ==============================================================================
+#
+# Format code with black:
+#   black src/ tests/
+#   black --check src/  # Check without modifying
+#
+# Lint with ruff (uses [tool.ruff] config below):
+#   ruff check src/ tests/
+#   ruff check --fix src/  # Auto-fix issues
+#   ruff format src/  # Format code (ruff can replace black)
+#
+# Type check with mypy (uses [tool.mypy] config below):
+#   mypy src/
+#   mypy --strict src/  # Even stricter than config
+#
+# Run tests (uses [tool.pytest.ini_options] config below):
+#   pytest
+#   pytest --cov=omicsbridge  # With coverage
+#   pytest -v tests/test_specific.py  # Run specific test file
+#
+# ==============================================================================
+
 [project]
 name = "omicsbridge"
 version = "0.1.0"
 description = "A bridge for converting between AnnData and SummarizedExperiment formats"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "anndata>=0.10.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "jupyter>=1.0.0",          # Required for Quarto to execute Python code blocks
+    "nbformat>=5.0.0",          # Required by Jupyter
+    "ipykernel>=6.0.0",         # Python kernel for Jupyter
+]
 authors = [
     { name = "Your Name", email = "your.email@example.com" }
 ]
@@ -24,6 +96,7 @@ dev = [
     "black>=23.0",
     "ruff>=0.1.0",
     "mypy>=1.0",
+    "pandas-stubs>=2.0.0",  # Type stubs for pandas
 ]
 
 [build-system]
@@ -38,17 +111,40 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 
+# ==============================================================================
+# Tool Configurations (read automatically when you run the tools)
+# ==============================================================================
+
 [tool.black]
-line-length = 100
-target-version = ["py310"]
+# Black reads these settings when you run: black src/
+line-length = 100              # Max characters per line
+target-version = ["py310"]     # Format for Python 3.10+
 
 [tool.ruff]
-line-length = 100
-target-version = "py310"
-select = ["E", "F", "I", "N", "W"]
+# Ruff reads these settings when you run: ruff check src/
+line-length = 100              # Max characters per line (match black)
+target-version = "py310"       # Target Python 3.10
+
+# Which rules to enable (ruff has hundreds of rules organized by code):
+select = [
+    "E",   # pycodestyle errors (spacing, syntax)
+    "F",   # pyflakes (unused imports, undefined names)
+    "I",   # isort (import sorting)
+    "N",   # pep8-naming (function/class naming conventions)
+    "W",   # pycodestyle warnings
+    "UP",  # pyupgrade (use modern Python syntax)
+    "B",   # flake8-bugbear (likely bugs)
+]
+
+# Auto-fix safe issues when running: ruff check --fix
+fix = true
+fixable = ["I", "F401", "UP"]  # Fix imports, unused imports, upgrade syntax
 
 [tool.mypy]
+# Mypy reads these settings when you run: mypy src/
 python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
+warn_return_any = true          # Warn if function returns 'Any' type
+warn_unused_configs = true      # Warn about unused config options
+disallow_untyped_defs = true    # Require type hints on all functions
+strict_optional = true          # Strict checking of Optional types
+check_untyped_defs = true       # Type-check bodies of untyped functions

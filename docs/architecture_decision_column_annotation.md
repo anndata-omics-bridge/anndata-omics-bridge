@@ -33,14 +33,16 @@ AnnData
 
 ### Core Principle
 
-The AnnData specification **does not require** column prefixes. Instead, column roles are defined in metadata, **structured by location** (var, obs, varm):
+The AnnData specification **does not require** column prefixes. Instead, column roles are defined in **application-specific metadata**, structured by location (var, obs, varm):
 
 ```python
-adata.uns['column_roles'] = {
+# Application-specific column roles (each tool defines its own requirements)
+adata.uns['exploreDE_column_roles'] = {
     'var': {
         # Feature annotations (shared across all DE tests)
-        'label': ['gene_symbol', 'gene_name', 'protein_id'],
-        'hierarchy': ['protein', 'peptide', 'site']
+        'description': ['description'],  # Required: free-text searchable description
+        'label': ['gene_symbol', 'gene_name', 'protein_id'],  # Optional: identifiers
+        # Note: 'hierarchy' not required for exploreDE (used by other tools)
     },
     'obs': {
         # Sample metadata and experimental design
@@ -60,27 +62,38 @@ adata.uns['column_roles'] = {
         }
     }
 }
+
+# Other tools can define their own column roles
+# adata.uns['prolfqua_column_roles'] = {...}
+# adata.uns['proteobench_column_roles'] = {...}
 ```
 
 **Key distinctions:**
-- **`var`**: Feature-level annotations shared across all analyses (gene symbols, protein IDs, hierarchical relationships)
+- **`var`**: Feature-level annotations shared across all analyses
+  - `description`: Required by exploreDE - free-text searchable field
+  - `label`: Optional identifiers (gene symbols, protein IDs, etc.)
+  - `hierarchy`: Not used by exploreDE (used by hierarchical analysis tools)
 - **`obs`**: Sample-level metadata (experimental factors, batch info)
 - **`varm["DE_*"]`**: Differential expression results for specific contrasts (effect sizes, p-values, statistics)
 
 ### Automatic Discovery Fallback
 
-If `uns['column_roles']` is missing, the system attempts to auto-populate it by scanning for recognized prefix patterns:
+If `uns['exploreDE_column_roles']` is missing, the system attempts to auto-populate it by scanning for recognized prefix patterns:
 
 ```python
-def discover_column_roles(adata):
-    """Auto-populate column_roles from prefix patterns if not present"""
-    if 'column_roles' in adata.uns:
+def discover_exploreDE_column_roles(adata):
+    """Auto-populate exploreDE_column_roles from prefix patterns if not present"""
+    if 'exploreDE_column_roles' in adata.uns:
         return  # Already defined, don't override
     
     roles = {'var': {}, 'obs': {}, 'varm': {}}
     
     # Scan var columns (feature annotations only - no effect/score here!)
-    for role in ['label', 'hierarchy']:
+    # Check for description (required for exploreDE)
+    if 'description' in adata.var.columns:
+        roles['var']['description'] = ['description']
+    
+    for role in ['label']:  # hierarchy not needed for exploreDE
         cols = [c for c in adata.var.columns if c.startswith(f'{role}_')]
         if cols:
             roles['var'][role] = cols
@@ -103,7 +116,7 @@ def discover_column_roles(adata):
             if de_roles:
                 roles['varm'][key] = de_roles
     
-    adata.uns['column_roles'] = roles
+    adata.uns['exploreDE_column_roles'] = roles
 ```
 
 ---
@@ -146,13 +159,13 @@ class ColumnResolver:
         self._ensure_column_roles()
     
     def _ensure_column_roles(self):
-        """Ensure column_roles exists, auto-discover if missing"""
-        if 'column_roles' not in self.adata.uns:
-            discover_column_roles(self.adata)
-            if not self.adata.uns.get('column_roles'):
+        """Ensure exploreDE_column_roles exists, auto-discover if missing"""
+        if 'exploreDE_column_roles' not in self.adata.uns:
+            discover_exploreDE_column_roles(self.adata)
+            if not self.adata.uns.get('exploreDE_column_roles'):
                 raise ValueError(
                     "No column roles found. Please provide "
-                    "adata.uns['column_roles'] mapping."
+                    "adata.uns['exploreDE_column_roles'] mapping."
                 )
     
     def get_columns(self, role, location='var', de_test=None):
@@ -167,7 +180,7 @@ class ColumnResolver:
         Returns:
             List of column names matching the role
         """
-        roles = self.adata.uns['column_roles']
+        roles = self.adata.uns['exploreDE_column_roles']
         
         if location not in roles:
             raise ValueError(
@@ -200,7 +213,7 @@ class ColumnResolver:
     
     def list_de_tests(self):
         """List all available DE tests"""
-        roles = self.adata.uns.get('column_roles', {})
+        roles = self.adata.uns.get('exploreDE_column_roles', {})
         return list(roles.get('varm', {}).keys())
     
     def get_de_columns(self, de_test, role):
@@ -232,10 +245,10 @@ adata.varm['DE_treated_vs_control'] = pd.DataFrame({
 })
 
 # On first access, resolver auto-populates:
-# adata.uns['column_roles'] = {
+# adata.uns['exploreDE_column_roles'] = {
 #     'var': {
-#         'label': ['label_gene_symbol', 'label_protein_id'],
-#         'hierarchy': ['hierarchy_protein', 'hierarchy_peptide']
+#         'description': ['description'],  # Required!
+#         'label': ['label_gene_symbol', 'label_protein_id']
 #     },
 #     'obs': {
 #         'factor': ['factor_condition', 'factor_batch'],
@@ -269,8 +282,9 @@ adata.varm['DE_treated_vs_control'] = pd.DataFrame({
 })
 
 # Provide explicit mapping
-adata.uns['column_roles'] = {
+adata.uns['exploreDE_column_roles'] = {
     'var': {
+        'description': ['description'],  # Required!
         'label': ['gene_symbol', 'protein_id']
     },
     'obs': {
@@ -300,8 +314,9 @@ adata.varm['DE_treatment_vs_control'] = pd.DataFrame({
 })
 
 # User provides mapping once
-adata.uns['column_roles'] = {
+adata.uns['exploreDE_column_roles'] = {
     'var': {
+        'description': ['Protein.names'],  # Use Protein.names as description
         'label': ['Gene.names', 'Protein.IDs']
     },
     'obs': {
