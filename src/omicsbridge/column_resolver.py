@@ -81,3 +81,28 @@ class ColumnResolver:
             loc_str = de_test if de_test else location
             raise ValueError(f"No columns found for role '{role}' in {loc_str}")
         return cols[0]
+
+    # Convenience methods for cleaner API
+    def var(self, role):
+        """Get primary column from var by role."""
+        return self.get_primary_column(role, location='var')
+
+    def var_all(self, role):
+        """Get all columns from var by role."""
+        return self.get_columns(role, location='var')
+
+    def obs(self, role):
+        """Get primary column from obs by role."""
+        return self.get_primary_column(role, location='obs')
+
+    def obs_all(self, role):
+        """Get all columns from obs by role."""
+        return self.get_columns(role, location='obs')
+
+    def de(self, de_test, role):
+        """Get primary column from DE test by role."""
+        return self.get_primary_column(role, de_test=de_test)
+
+    def de_all(self, de_test, role):
+        """Get all columns from DE test by role."""
+        return self.get_columns(role, de_test=de_test)

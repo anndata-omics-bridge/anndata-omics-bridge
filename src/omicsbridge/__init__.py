@@ -3,7 +3,7 @@
 __version__ = "0.1.0"
 
 from omicsbridge.column_resolver import ColumnResolver
-from omicsbridge.validator import validate_anndata_omics
+from omicsbridge.exploreDE_validator import validate_anndata_omics
 
 __all__ = [
     "ColumnResolver",

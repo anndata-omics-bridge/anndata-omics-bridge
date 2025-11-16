@@ -56,6 +56,37 @@ ColumnResolver <- R6Class("ColumnResolver",
                 stop(sprintf("No columns found for role '%s' in %s", role, loc_str))
             }
             return(cols[1])
+        },
+
+        # Convenience methods for cleaner API
+        #' @description Get primary column from var by role
+        var = function(role) {
+            self$get_primary_column(role, location = 'var')
+        },
+
+        #' @description Get all columns from var by role
+        var_all = function(role) {
+            self$get_columns(role, location = 'var')
+        },
+
+        #' @description Get primary column from obs by role
+        obs = function(role) {
+            self$get_primary_column(role, location = 'obs')
+        },
+
+        #' @description Get all columns from obs by role
+        obs_all = function(role) {
+            self$get_columns(role, location = 'obs')
+        },
+
+        #' @description Get primary column from DE test by role
+        de = function(de_test, role) {
+            self$get_primary_column(role, de_test = de_test)
+        },
+
+        #' @description Get all columns from DE test by role
+        de_all = function(de_test, role) {
+            self$get_columns(role, de_test = de_test)
         }
     )
 )

@@ -1,0 +1,211 @@
+---
+title: "prolfqua Specification for AnnData"
+author:
+  - "PL"
+  - "WEW"
+  - "..."
+  - "Claude AI"
+date: "2025-11-14"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: false
+    embed-resources: true
+editor:
+  markdown:
+    wrap: 72
+---
+
+# prolfqua Column Roles
+
+**About prolfqua:** prolfqua is an R package for protein label-free quantification (LFQ) analysis developed at FGCZ. It handles hierarchical proteomics data (precursor→peptide→protein) and performs statistical modeling with support for complex experimental designs including interactions, paired designs, and batch effects. The package works with outputs from diverse quantification tools (MaxQuant, Spectronaut, DIA-NN, FragPipe, MSstats, etc.). Unlike exploreDE which works at a single aggregation level, prolfqua aggregates data from lower hierarchy levels (e.g., peptides) to higher levels (proteins) and requires detailed hierarchy information for rollup operations.
+
+**Annotation Files:** Experimental design information (factors, subjects, contrasts) is provided to prolfquapp via a **separate annotation file** that is independent of the AnnData object. The annotation file must contain a column matching the sample identifiers in `obs`. Model formulas and contrasts are specified in prolfquapp's interface, not stored in the input AnnData.
+
+## var Column Roles
+
+**Column roles for prolfqua in `var`:**
+
+| Role | Required? | Description | Examples |
+|------|-----------|-------------|----------|
+| `hierarchy` | **Yes** | Columns defining hierarchical relationships | `Protein.Group`, `Stripped.Sequence`, `precursor_Id` |
+| `intensity` | **Yes** | Primary quantitative column to analyze | `Peptide.Quantity`, `Precursor.Quantity`, `Intensity`, `mq.protein.lfq.intensity` |
+| `qvalue` | No | Quality control scores (recommended) | `qValue`, `PEP`, `Q.Value`, `Lib.PG.Q.Value` |
+| `nr_children` | No | Number of children in hierarchy | `nr_peptides`, `nr_precursors`, `ms.ms.count` |
+| `description` | No | Feature descriptions | `Protein.Names`, `fasta.header`, `Gene.names` |
+
+**Why prolfqua needs this:** prolfqua aggregates data from lower hierarchy levels to higher levels using the `hierarchy` columns. The `intensity` role identifies the quantitative values for statistical modeling. QC metadata enables filtering low-confidence identifications. Hierarchy columns may contain duplicates (e.g., multiple peptides per protein), but **all hierarchy columns combined must uniquely identify each row**.
+
+## obs Column Roles
+
+**Column roles for prolfqua in `obs`:**
+
+| Role | Required? | Description | Examples |
+|------|-----------|-------------|----------|
+| `sample_id` | **Yes** | Unique sample identifier - **MUST match annotation file** | `raw.file`, `fileName`, `channel`, `Run` |
+
+**Why prolfqua needs this:** The `sample_id` links intensity measurements to samples and **must match** the identifier column in the separately-provided annotation file. Experimental factors (`group`, `Subject`, `CONTROL`) are defined in the annotation file, not in the AnnData `obs`.
+
+## prolfqua Metadata Structure
+
+Store prolfqua-specific metadata in `uns['prolfqua']`:
+
+```python
+adata.uns['prolfqua'] = {
+    'column_roles': {
+        'var': {
+            'hierarchy': ['Protein.Group', 'Stripped.Sequence'],  # REQUIRED
+            'intensity': ['Peptide.Quantity'],  # REQUIRED
+            'qvalue': ['qValue'],  # Optional
+            'nr_children': ['nr_children'],  # Optional
+            'description': ['Protein.Names']  # Optional
+        },
+        'obs': {
+            'sample_id': ['raw.file']  # REQUIRED - must match annotation file
+        }
+    }
+    # Note: Model formulas and contrasts are added by prolfquapp, not stored here
+}
+```
+
+**Important:** The annotation file (containing `group`, `Subject`, `CONTROL`, etc.) is **provided separately** to prolfquapp and must have a column matching the `sample_id` values in `obs`.
+
+**Example: Creating hierarchical peptide-level data with prolfqua metadata**
+
+::: {.panel-tabset}
+
+## Python
+
+```{python}
+#| eval: false
+import anndata as ad
+import numpy as np
+import pandas as pd
+
+# Create peptide-level AnnData (multiple peptides per protein)
+np.random.seed(999)
+n_peptides = 200
+peptide_intensities = np.random.lognormal(mean=8, sigma=2, size=(60, n_peptides))
+
+# Sample metadata - only sample identifiers (factors come from annotation file)
+peptide_obs = pd.DataFrame({
+    'raw.file': [f'sample_{i:03d}.raw' for i in range(60)]
+}, index=[f'sample_{i:03d}.raw' for i in range(60)])
+
+# Peptide annotations with hierarchy and QC info
+peptide_var = pd.DataFrame({
+    'Protein.Group': np.random.choice([f'P{i:05d}' for i in range(50)], n_peptides),
+    'Stripped.Sequence': [f'PEPTIDE{i}K' for i in range(n_peptides)],
+    'Protein.Names': np.random.choice([f'Protein_{i}_function' for i in range(50)], n_peptides),
+    'qValue': np.random.uniform(0, 0.01, n_peptides),
+    'nr_children': np.random.randint(1, 10, n_peptides)
+}, index=[f'PEP_{i:05d}' for i in range(n_peptides)])
+
+adata_peptide = ad.AnnData(X=peptide_intensities, obs=peptide_obs, var=peptide_var)
+adata_peptide.obs.index.name = 'raw.file'
+adata_peptide.var.index.name = 'peptide_id'
+
+# Define column roles for prolfqua
+adata_peptide.uns['prolfqua'] = {
+    'column_roles': {
+        'var': {
+            'hierarchy': ['Protein.Group', 'Stripped.Sequence'],
+            'intensity': ['Peptide.Quantity'],  # Would be in X or a layer
+            'qvalue': ['qValue'],
+            'nr_children': ['nr_children'],
+            'description': ['Protein.Names']
+        },
+        'obs': {
+            'sample_id': ['raw.file']
+        }
+    }
+}
+
+print(f"Peptide data: {adata_peptide.n_vars} peptides mapping to ~50 proteins")
+print(f"Hierarchy columns: {adata_peptide.uns['prolfqua']['column_roles']['var']['hierarchy']}")
+print(f"Sample ID column: {adata_peptide.uns['prolfqua']['column_roles']['obs']['sample_id']}")
+```
+
+## R
+
+```{r}
+#| eval: false
+library(anndataR)
+
+# Create peptide-level AnnData (multiple peptides per protein)
+set.seed(999)
+n_peptides <- 200
+peptide_intensities <- matrix(rlnorm(60 * n_peptides, meanlog=8, sdlog=2), nrow=60, ncol=n_peptides)
+
+# Sample metadata - only sample identifiers (factors come from annotation file)
+peptide_obs <- data.frame(
+    raw.file = sprintf('sample_%03d.raw', 0:59),
+    row.names = sprintf('sample_%03d.raw', 0:59)
+)
+
+# Peptide annotations with hierarchy and QC info
+peptide_var <- data.frame(
+    Protein.Group = sample(sprintf('P%05d', 0:49), n_peptides, replace=TRUE),
+    Stripped.Sequence = sprintf('PEPTIDE%dK', 0:(n_peptides-1)),
+    Protein.Names = sample(sprintf('Protein_%d_function', 0:49), n_peptides, replace=TRUE),
+    qValue = runif(n_peptides, 0, 0.01),
+    nr_children = sample(1:10, n_peptides, replace=TRUE),
+    row.names = sprintf('PEP_%05d', 0:(n_peptides-1))
+)
+
+adata_peptide <- AnnData(
+    X = peptide_intensities,
+    obs = peptide_obs,
+    var = peptide_var
+)
+
+# Define column roles for prolfqua
+adata_peptide$uns[['prolfqua']] <- list(
+    column_roles = list(
+        var = list(
+            hierarchy = list('Protein.Group', 'Stripped.Sequence'),
+            intensity = list('Peptide.Quantity'),  # Would be in X or a layer
+            qvalue = list('qValue'),
+            nr_children = list('nr_children'),
+            description = list('Protein.Names')
+        ),
+        obs = list(
+            sample_id = list('raw.file')
+        )
+    )
+)
+
+cat(sprintf("Peptide data: %d peptides mapping to ~50 proteins\n", ncol(adata_peptide)))
+cat(sprintf("Hierarchy columns: %s\n", paste(unlist(adata_peptide$uns$prolfqua$column_roles$var$hierarchy), collapse=", ")))
+cat(sprintf("Sample ID column: %s\n", paste(unlist(adata_peptide$uns$prolfqua$column_roles$obs$sample_id), collapse=", ")))
+```
+
+:::
+
+## Annotation File Structure
+
+The annotation file is provided separately to prolfquapp and contains experimental design information:
+
+**Required columns:**
+- Sample identifier column (must match `obs` sample_id values) - e.g., `raw.file`, `fileName`, `channel`
+- `group` or `Experiment` - Experimental groups/conditions
+- `CONTROL` - Column with "C" (control) or "T" (treatment) designations (optional, can specify contrasts explicitly)
+
+**Optional columns:**
+- `Subject` or `BioReplicate` - Pairing variable for repeated measures
+- `Name` - Sample names for display
+- `ContrastName` - Explicit contrast names
+- `Contrast` - Explicit contrast formulas (e.g., "G_treated - G_control")
+
+**Example annotation file:**
+
+| raw.file | Name | group | Subject | CONTROL |
+|----------|------|-------|---------|---------|
+| sample_000.raw | S1 | control | Patient1 | C |
+| sample_001.raw | S2 | control | Patient2 | C |
+| sample_002.raw | S3 | treated | Patient1 | T |
+| sample_003.raw | S4 | treated | Patient2 | T |
+
+**Important:** The `raw.file` column values must exactly match the values in `adata.obs.index` (or the column designated as `sample_id` in the column_roles).

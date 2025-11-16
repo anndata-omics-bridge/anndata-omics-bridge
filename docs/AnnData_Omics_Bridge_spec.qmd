@@ -1,0 +1,1176 @@
+---
+title: "AnnData Structure Specification for Omics Data (Flexible Column Annotation)"
+author:
+  - "PL"
+  - "WEW"
+  - "..."
+  - "Claude AI"
+date: "2025-11-12"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: false
+    embed-resources: true
+    include-after-body:
+      text: |
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+          // Add toggle buttons
+          const style = document.createElement('style');
+          style.textContent = `
+            .language-toggle {
+              position: fixed;
+              top: 10px;
+              right: 10px;
+              z-index: 1000;
+              background: white;
+              padding: 10px;
+              border: 1px solid #ddd;
+              border-radius: 5px;
+              box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            }
+            .language-toggle button {
+              margin: 0 5px;
+              padding: 5px 15px;
+              cursor: pointer;
+              border: 1px solid #007bff;
+              background: white;
+              color: #007bff;
+              border-radius: 3px;
+            }
+            .language-toggle button:hover {
+              background: #007bff;
+              color: white;
+            }
+          `;
+          document.head.appendChild(style);
+
+          const toggleDiv = document.createElement('div');
+          toggleDiv.className = 'language-toggle';
+          toggleDiv.innerHTML = `
+            <button onclick="switchAllTabs('Python')">Show All Python</button>
+            <button onclick="switchAllTabs('R')">Show All R</button>
+          `;
+          document.body.appendChild(toggleDiv);
+
+          // Global function to switch all tabs
+          window.switchAllTabs = function(language) {
+            document.querySelectorAll('.panel-tabset').forEach(tabset => {
+              const tabs = tabset.querySelectorAll('.nav-link');
+              tabs.forEach(tab => {
+                if (tab.textContent.trim() === language) {
+                  tab.click();
+                }
+              });
+            });
+          };
+        });
+        </script>
+editor:
+  markdown:
+    wrap: 72
+---
+
+# Introduction
+
+The **Omics Bridge** project establishes a standardized data format to facilitate multi-step, multi-tool analysis workflows in quantitative omics. By defining a common data container based on *AnnData*, this specification enables seamless data exchange between diverse analysis packages and visualization tools without requiring tool-specific adapters or format conversions.
+
+## Project Goals
+
+The primary goal is to create **self-sufficient data objects** that carry both:
+- Quantitative measurements (expression matrices, intensities, counts)
+- Rich metadata describing how to interpret these measurements (column roles, experimental factors, analysis provenance)
+
+This self-describing approach allows downstream tools to discover and correctly interpret data without hard-coding assumptions about column names or structure.
+
+## Participating Tools and Packages
+
+The following tools and packages use this standardized format:
+
+- **ezRun**: Workflow management and analysis orchestration
+- **ezPyz**: Python-based quantification and analysis utilities
+- **prolfqua**: Proteomics-focused differential expression and quality control
+- **exploreDE**: Interactive visualization and exploration of differential expression results
+- **Mass spectrometry data generators**: Tools that produce quantification outputs from raw MS data
+- **Additional packages**: The specification is designed to be extensible for future tools
+
+By adopting this common format, these tools can work together in flexible analysis pipelines where data flows naturally from quantification through statistical analysis to visualization.
+
+---
+
+# Use Case
+
+## Harmonizing Omics Quantification Outputs for Downstream Analysis
+
+Proteomics identification and quantification software — such as *Spectronaut*, *DIA-NN*, *alphaDIA*, *MaxQuant*, and *FragPipe* — produce results at various levels of biological aggregation, including *ion*, *peptidoform*, *protein*, *PTM site*, or *multisite* level.
+Similarly, metabolomics tools such as *MZmine* or *Compound Discoverer*, and genomics analysis pipelines, generate quantitative data tables with differing structures, column names, and metadata conventions.
+
+For proteomics, specialized importers parse and normalize diverse table structures, transforming them into standardized data objects that enable robust differential expression analysis. However, changes in upstream output formats can easily break compatibility, as importers depend on specific column naming and structure conventions.
+
+Projects like *ProteoBench* provide parsers for many proteomics quantification tools, and could be extended to export data directly into *AnnData*.
+
+Structural changes to data schemas can disrupt compatibility with visualization and downstream tools.
+
+To summarize:
+
+- Different omics technologies rely on diverse software ecosystems, and our goal is to interconnect them with analysis and visualization tools in a scalable way.
+- It is unrealistic for every downstream application (for differential expression, enrichment, or visualization) to natively handle the idiosyncrasies of all upstream quantification tools and omics modalities.
+- Maintaining extensive mapping tables between software packages becomes complex and fragile.
+
+Therefore, an **intermediate data format** is needed—one that is both:
+
+- **flexible enough** to represent omics- and tool-specific features,
+- yet **simple enough** to be generated easily, in a preprocessing step.
+
+The guiding principle for this format is to minimize requirements imposed on tool developers when writing into this format, while maintaining semantic richness for downstream interoperability.
+
+**Workflow:**
+
+1. **Convert** raw quantification outputs into a multi-assay data container (*AnnData*).
+2. **Add conversion support** for various quantification applications to ensure integration.
+3. **Run the DE application**, starting from the multi-assay container and appending differential expression results.
+4. **Run the GSEA/ORA application**, which adds functional enrichment results.
+5. **Visualize** integrated quantitative and functional data in applications such as *exploreDE*.
+
+![Omics Data Flow](omics_data_flow.png)
+
+This modular architecture allows interoperability across tools, omics domains, and institutions, ensuring long-term sustainability and reproducibility of quantitative omics analyses.
+
+## Contract: "Essential Data" for Tool Interoperability
+
+To make multiple omics tools work on a common container without brittle per-exporter adapters/importers, each downstream tool (*exploreDE*, *prolfquaDE*) that operates on *AnnData* must publish an **essential set** of required data and metadata.
+
+The goal is a **minimal, stable contract**: enough information to fully support the tool's features, while **abstaining from non-essential requirements** that complicate *AnnData* creation.
+
+Each tool also implements a validator (function, tool, or script) that allows easy checking of whether the multi-assay container file will work.
+
+**Principles**
+
+1. **Essential-only**: Keep required fields to the minimum needed for the tool's core functionality. Avoid nice-to-haves.
+   - Some additional metadata (e.g., sample annotations or contrasts) can be added when using a tool; therefore, there is no need to add it to the *AnnData* object at the beginning.
+
+2. **Metadata-first column roles**: Encode column semantics using **application-specific metadata**.
+   - Different applications define their own requirements (e.g., `uns['exploreDE']['column_roles']`), not forced column name prefixes.
+   - Optional: Use column prefixes for convenience (auto-discovered if metadata is missing).
+
+3. **Tool-specific contracts**: Each tool (e.g., *exploreDE*, *prolfqua* DE) documents its **essential contract**. Upstream writers and importers target the contract—**not** tool-internal structures—by adding annotations to the *AnnData* object.
+
+
+---
+
+# Column Annotation Strategy
+
+## Flexible Column Naming with Metadata
+
+**Key Principle:** Column names are **arbitrary**—their semantic meaning is defined in **application-specific metadata** (e.g., `uns['exploreDE']['column_roles']`), not by naming convention.
+
+This approach:
+
+- Accepts data from any source without renaming columns.
+- Preserves original column names from upstream tools.
+- Enables multi-tool interoperability (each tool defines its own requirements).
+- Optional: Auto-discovers prefixed columns for convenience.
+
+---
+
+# AnnData Structure Overview
+
+AnnData components:
+
+| Component | AnnData Slot | Description |
+|-----------|--------------|-------------|
+| Features  | `var/varm`   | Annotation of variables/features (gene/protein/metabolite annotations and DE results) |
+| Samples   | `obs/obsm`   | Annotation of observations (sample metadata and experimental factors) |
+| Counts    | `X`/`layers` | Raw/normalized/transformed abundance matrices |
+| Other     | `uns`        | Unstructured metadata (column roles, pathways, settings) |
+
+---
+
+# exploreDE Specification
+
+This section defines the *exploreDE*-specific requirements for column roles. Other tools (e.g., *prolfqua*) may define different requirements in their own sections.
+
+**About exploreDE:** exploreDE is an interactive data visualization and analysis application for exploring differential expression (DE) results. Developed at the Functional Genomics Center Zurich (FGCZ), it enables researchers to interactively filter, visualize, and export custom figures (volcano plots, heatmaps, PCA plots, pathway visualizations) from DE analysis results generated by upstream tools like SUSHI or prolfquapp. The application needs to work with data from diverse quantification and statistical tools, each with different column naming conventions. **Column roles solve this problem** by providing a semantic mapping layer: instead of hard-coding column names like "log2FoldChange" or "padj", exploreDE queries the metadata to find which columns contain effect sizes, significance scores, sample factors, and feature descriptions—allowing it to work seamlessly with any upstream tool's output.
+
+---
+
+## X and Layers (Counts / Abundances / Intensities)
+
+Abundance matrices are stored in AnnData `X` and `layers`. In AnnData, rows = observations (samples), columns = variables (features).
+
+**Why exploreDE needs this:** exploreDE generates heatmaps and intensity plots that require access to the quantitative data matrices. Documenting which layer was used for DE analysis (via `uns['exploreDE']['de_tests'][<test_name>]['layer_used']`) ensures visualizations use the correct transformation and maintains reproducibility.
+
+**What Should Go in X?** The `X` matrix holds the **analysis-ready** or **working** data - the form that most downstream analysis tools will operate on by default.
+
+**Convention:** Store **transformed/normalized data** in `X`, and preserve **raw data** in named layers.
+
+**Rationale:**
+
+- **Most analyses use transformed data:** Differential expression testing, PCA, clustering, and most visualizations work on log-transformed or variance-stabilized data, not raw intensities/counts.
+- **X is the default:** Tools that don't specify a layer will use `X` by default, so it should contain the most commonly used form.
+- **Raw data is preserved:** Store untransformed data in named layers (e.g., `intensities`, `counts`) for transparency and special analyses that require it.
+
+**Example workflow:**
+- Start with raw intensities → store in `layers['intensities']`
+- Log2-transform → store in `X` (this becomes your working data)
+- Add other transformations → store in additional layers (e.g., `layers['zscore']`)
+
+This convention follows the **scanpy** (single-cell RNA-seq) pattern:
+- `adata.X` → normalized, log-transformed data (default for analysis)
+- `adata.layers['counts']` → raw counts (preserved for reference)
+
+**Note:** This is a convention, not a strict requirement. If your workflow primarily uses raw intensities, you can reverse this pattern - just clearly document what `X` contains using `adata.uns['X_layer_name']`.
+
+**Layer Names and Metadata:** Layer names should be descriptive of the data type or transformation applied (e.g., `counts`, `tpm`, `vst`, `log2_tpm`, `intensities`).
+
+The distribution of the data (exponential, Poisson, normal) is **not encoded in the layer name**. Instead, tools determine the sampling distribution statistically when needed for visualization or analysis.
+
+**Important:**
+- Document what transformation is stored in `X` using `adata.uns['X_layer_name']` (e.g., `'log2_intensity'`)
+- Document in `adata.uns['exploreDE']['de_tests'][<test_name>]['layer_used']` which layer (or `'X'`) was used for each DE test
+
+| Layer Type | Description | Examples |
+|:-----------|:------------|:---------|
+| Numeric abundance | Raw, normalized, or transformed abundance data | `counts`, `tpm`, `fpkm`, `intensities` |
+| Transformed abundance | Log-transformed or variance-stabilized data | `log2_tpm`, `vst`, `voom`, `vsn` |
+| Metadata matrices | Feature-specific annotations per sample | `nr_peptides`, `stdev`, `retention_time` |
+
+**Example: Adding multiple data layers**
+
+::: {.panel-tabset}
+
+## Python
+
+```{python}
+import anndata as ad
+import numpy as np
+
+# Create AnnData with just the data matrix (obs/var added later)
+np.random.seed(123)
+raw_intensities = np.random.lognormal(mean=12, sigma=1.5, size=(50, 30))
+
+adata_layers = ad.AnnData(X=raw_intensities)
+
+# Store raw intensities in a named layer
+adata_layers.layers['intensities'] = adata_layers.X.copy()
+
+# Log2-transform and store in X
+adata_layers.X = np.log2(adata_layers.X + 1)  # +1 to handle zeros
+adata_layers.uns['X_layer_name'] = 'log2_intensity'  # Document what X contains
+
+# Add z-score normalized version
+mean_vals = adata_layers.X.mean(axis=0)
+std_vals = adata_layers.X.std(axis=0)
+adata_layers.layers['zscore'] = (adata_layers.X - mean_vals) / std_vals
+
+print(f"Data shape: {adata_layers.shape[0]} samples × "
+      f"{adata_layers.shape[1]} features")
+print(f"Available layers: {list(adata_layers.layers.keys())}")
+print(f"X contains: {adata_layers.uns['X_layer_name']}")
+```
+
+## R
+
+```{r}
+library(anndataR)
+
+# Create AnnData with just the data matrix (obs/var added later)
+set.seed(123)
+raw_intensities <- matrix(rlnorm(50 * 30, meanlog=12, sdlog=1.5), nrow=50, ncol=30)
+
+adata_layers <- AnnData(X = raw_intensities)
+
+# Store raw intensities in a named layer
+adata_layers$layers[['intensities']] <- adata_layers$X
+
+# Log2-transform and store in X
+adata_layers$X <- log2(adata_layers$X + 1)  # +1 to handle zeros
+adata_layers$uns[['X_layer_name']] <- 'log2_intensity'  # Document what X contains
+
+# Add z-score normalized version
+adata_layers$layers[['zscore']] <- scale(adata_layers$X)
+
+cat(sprintf("Data shape: %d samples × %d features\n",
+    nrow(adata_layers), ncol(adata_layers)))
+cat(sprintf("Available layers: %s\n",
+    paste(names(adata_layers$layers), collapse=", ")))
+cat(sprintf("X contains: %s\n", adata_layers$uns$X_layer_name))
+```
+
+:::
+
+
+---
+
+## var (Features)
+
+Feature annotations are stored in `var`.
+
+We can store genes, proteins, peptides, metabolites, etc. in the `var` container.
+
+**Why exploreDE needs this:** exploreDE's core functionality includes searching and filtering features by description (required), as well as displaying identifiers like gene symbols or protein IDs in plots and tables. The `description` role enables full-text search across features, while `label` roles provide human-readable identifiers for data tables and plot labels.
+
+**Feature Identifiers (Index):** The `var` DataFrame index (`adata.var.index` in Python, `rownames(adata$var)` in R) serves as the **unique identifier** for each feature:
+
+- **Must be unique**: Each feature must have a distinct identifier.
+- **Must match across components**: The same identifiers must be used in `X`, `layers`, and `varm`.
+- **Index name**: Set `adata.var.index.name` to indicate the type (e.g., `'gene_id'`, `'protein_id'`, `'peptide_id'`).
+
+**Example** (continuing from `adata_layers` created earlier):
+
+::: {.panel-tabset}
+
+## Python
+
+```python
+# Build var DataFrame with custom index
+var_df = pd.DataFrame({
+    'description': ['Gene A function', 'Gene B function'],
+    'gene_symbol': ['GENE_A', 'GENE_B']
+}, index=['ENSG00000001', 'ENSG00000002'])  # Unique Ensembl IDs
+
+# Assign to existing AnnData
+adata_layers.var = var_df
+adata_layers.var.index.name = 'gene_id'  # Document what the index represents
+```
+
+## R
+
+```r
+# Build var DataFrame with row.names as index
+var_df <- data.frame(
+    description = c('Gene A function', 'Gene B function'),
+    gene_symbol = c('GENE_A', 'GENE_B'),
+    row.names = c('ENSG00000001', 'ENSG00000002')  # Unique Ensembl IDs
+)
+
+# Assign to existing AnnData
+adata_layers$var <- var_df
+# Row names are automatically used as the index
+```
+
+:::
+
+**Feature Annotation Table:** Single table shared across all DE tests in the AnnData object.
+
+All columns can be used for filtering and subsetting. Column types (string, integer, numeric) determine available filter operations.
+
+**Column names are arbitrary**—their roles are defined in application-specific metadata.
+
+**Requirements for `var`:**
+
+| Role | Required? | Description | Examples |
+|------|-----------|-------------|----------|
+| `description` | **Yes** | Free-text searchable description | `description`, `Protein.names`, `Gene description` |
+| `label` | No | Human-readable identifiers | `gene_symbol`, `Gene.names`, `protein_id`, `Protein.IDs`, `uniprot_id` |
+
+**Note:** Other tools may define different requirements (e.g., `hierarchy` for proteomics rollup tools).
+
+**Example: Adding feature annotations with arbitrary names**
+
+::: {.panel-tabset}
+
+## Python
+
+```{python}
+import anndata as ad
+import numpy as np
+import pandas as pd
+
+# Create AnnData with just the matrix (continuing from earlier pattern)
+np.random.seed(456)
+protein_data = np.random.lognormal(mean=10, sigma=2, size=(40, 25))
+adata_features = ad.AnnData(X=protein_data)
+
+# Build var DataFrame with all annotations
+var_df = pd.DataFrame({
+    'protein_id': [f'P{i:05d}' for i in range(25)],
+    'description': [f'Protein {i} function' for i in range(25)],
+    'gene_symbol': [f'GENE{i}' for i in range(25)],
+    'uniprot_id': [f'UNI{i:05d}' for i in range(25)],
+    'nr_peptides': np.random.randint(2, 50, 25)
+}, index=[f'P{i:05d}' for i in range(25)])
+
+# Add computed columns
+var_df['mean_intensity'] = adata_features.X.mean(axis=0)
+
+# Assign to AnnData
+adata_features.var = var_df
+adata_features.var.index.name = 'protein_id'
+
+# Define column roles for exploreDE
+adata_features.uns['exploreDE'] = {
+    'column_roles': {
+        'var': {
+            'description': ['description'],  # REQUIRED
+            'label': [
+                'gene_symbol', 'protein_id', 'uniprot_id',
+                'nr_peptides', 'mean_intensity'
+            ]
+        }
+    }
+}
+
+print("Feature annotations:")
+for col in adata_features.var.columns:
+    print(f"  - {col}")
+var_roles = adata_features.uns['exploreDE']['column_roles']['var']
+print("Label columns:")
+for col in var_roles['label']:
+    print(f"  - {col}")
+```
+
+## R
+
+```{r}
+library(anndataR)
+
+# Create AnnData with just the matrix (continuing from earlier pattern)
+set.seed(456)
+protein_data <- matrix(rlnorm(40 * 25, meanlog=10, sdlog=2), nrow=40, ncol=25)
+adata_features <- AnnData(X = protein_data)
+
+# Build var DataFrame with all annotations
+var_df <- data.frame(
+    protein_id = sprintf('P%05d', 0:24),
+    description = sprintf('Protein %d function', 0:24),
+    gene_symbol = sprintf('GENE%d', 0:24),
+    uniprot_id = sprintf('UNI%05d', 0:24),
+    nr_peptides = sample(2:50, 25, replace=TRUE),
+    row.names = sprintf('P%05d', 0:24)
+)
+
+# Add computed columns
+var_df$mean_intensity <- colMeans(adata_features$X)
+
+# Assign to AnnData
+adata_features$var <- var_df
+
+# Define column roles for exploreDE
+adata_features$uns[['exploreDE']] <- list(
+    column_roles = list(
+        var = list(
+            description = list('description'),  # REQUIRED
+            label = list(
+                'gene_symbol', 'protein_id', 'uniprot_id',
+                'nr_peptides', 'mean_intensity'
+            )
+        )
+    )
+)
+
+cat("Feature annotations:\n")
+for (col in colnames(adata_features$var)) {
+    cat(sprintf("  - %s\n", col))
+}
+var_roles <- adata_features$uns$exploreDE$column_roles$var
+cat("Label columns:\n")
+for (col in unlist(var_roles$label)) {
+    cat(sprintf("  - %s\n", col))
+}
+```
+
+:::
+
+---
+
+## varm (Differential Expression Results)
+
+One set of columns per DE test performed.
+
+**Why exploreDE needs this:** Volcano plots, MA plots, and significance filtering are central to exploreDE's interface. The application needs to identify which columns contain effect sizes (`effect` role) for the x-axis and which contain significance values (`score` role) for the y-axis, regardless of whether the upstream tool called them "logFC", "log2FoldChange", "beta", "pvalue", "padj", or "FDR".
+
+Each DE test is stored in `varm` as a **pandas DataFrame** (or R `data.frame`), accessed by a distinct name. The DataFrame must have the same index as `adata.var` (same length and order).
+
+The DE table name format is: `DE_<name_of_contrast>` where `<name_of_contrast>` is a distinct identifier for this comparison.
+
+**DE Column Roles:** For each DE test in `varm`, define column roles in `uns['exploreDE']['column_roles'][<de_test_name>]`:
+
+| Role | Description | Common column names |
+|------|-------------|---------------------|
+| `effect` | Effect size (fold change) | `logFC`, `log2FC`, `log2FoldChange`, `lfc`, `beta` |
+| `score` | Statistical significance | `pvalue`, `padj`, `FDR`, `q_value`, `adjusted_pval` |
+| `label` | Additional statistics/metadata | `base_mean`, `baseMean`, `t_statistic`, `lfcSE`, `ci_upper`, `ci_lower` |
+
+**DE Test Metadata:** In addition to column roles, store metadata about each DE test in `uns['exploreDE']['de_tests'][<de_test_name>]`. This metadata documents how the analysis was performed:
+
+| Metadata Field | Description | Example |
+|----------------|-------------|---------|
+| `layer_used` | Which layer/matrix was used for the test | `'vst'`, `'log2_tpm'`, `'X'` |
+| `factor_used` | Experimental factors included in the model | `['condition']`, `['treatment', 'batch']` |
+| `contrast_formula` | The contrast being tested | `'treated - control'`, `'groupB - groupA'` |
+| `model` | Statistical model/method used | `'DESeq2'`, `'limma'`, `'t-test'` |
+
+This metadata is essential for:
+
+- **Reproducibility**: Document which data and model were used.
+- **Interpretation**: Understand the biological question being tested.
+- **Tool compatibility**: Allow downstream tools to validate compatibility.
+
+**Example: Storing DE results with original DESeq2 column names**
+
+::: {.panel-tabset}
+
+## Python
+
+```{python}
+import anndata as ad
+import numpy as np
+import pandas as pd
+
+# Create a minimal AnnData object for this example
+np.random.seed(100)
+n_samples, n_features = 50, 30
+X = np.random.lognormal(mean=10, sigma=2, size=(n_samples, n_features))
+
+obs = pd.DataFrame({
+    'condition': ['control'] * 25 + ['treated'] * 25
+}, index=[f'sample_{i}' for i in range(n_samples)])
+
+var = pd.DataFrame({
+    'description': [f'Gene {i}' for i in range(n_features)]
+}, index=[f'gene_{i}' for i in range(n_features)])
+
+adata = ad.AnnData(X=X, obs=obs, var=var)
+
+# Initialize exploreDE metadata
+adata.uns['exploreDE'] = {
+    'column_roles': {
+        'var': {'description': ['description']},
+        'obs': {'factor': ['condition']}
+    }
+}
+
+# Simulate DESeq2-style results with original column names (no prefixes!)
+de_results = pd.DataFrame({
+    'log2FoldChange': np.random.randn(adata.n_vars),      # DESeq2 style
+    'pvalue': np.random.uniform(0, 1, adata.n_vars),
+    'padj': np.random.uniform(0, 1, adata.n_vars),
+    'baseMean': np.random.uniform(100, 10000, adata.n_vars),
+    'lfcSE': np.random.uniform(0.1, 1, adata.n_vars)
+}, index=adata.var_names)
+
+# Store in varm as DataFrame
+adata.varm['DE_treated_vs_control'] = de_results
+
+# Define column roles for this specific DE test (no 'varm' nesting - it's implicit)
+adata.uns['exploreDE']['column_roles']['DE_treated_vs_control'] = {
+    'effect': ['log2FoldChange'],
+    'score': ['pvalue', 'padj'],
+    'label': ['baseMean', 'lfcSE']
+}
+
+# Initialize de_tests section and store metadata about the DE test
+adata.uns['exploreDE']['de_tests'] = {
+    'DE_treated_vs_control': {
+        'layer_used': 'vst',
+        'factor_used': ['condition'],
+        'contrast_formula': 'treated - control',
+        'model': 'DESeq2'
+    }
+}
+
+print(f"DE results stored: {adata.varm['DE_treated_vs_control'].shape}")
+de_roles = adata.uns['exploreDE']['column_roles']['DE_treated_vs_control']
+print(f"DE effect columns: {de_roles['effect']}")
+print(f"DE score columns: {de_roles['score']}")
+```
+
+## R
+
+```{r}
+library(anndataR)
+
+# Create a minimal AnnData object for this example
+set.seed(100)
+n_samples <- 50
+n_features <- 30
+X <- matrix(rlnorm(n_samples * n_features, meanlog=10, sdlog=2), nrow=n_samples, ncol=n_features)
+
+obs <- data.frame(
+    condition = rep(c('control', 'treated'), each=25),
+    row.names = sprintf('sample_%d', 0:(n_samples-1))
+)
+
+var <- data.frame(
+    description = sprintf('Gene %d', 0:(n_features-1)),
+    row.names = sprintf('gene_%d', 0:(n_features-1))
+)
+
+adata <- AnnData(X = X, obs = obs, var = var)
+
+# Initialize exploreDE metadata
+adata$uns[['exploreDE']] <- list(
+    column_roles = list(
+        var = list(description = list('description')),
+        obs = list(factor = list('condition'))
+    )
+)
+
+# Simulate DESeq2-style results with original column names (no prefixes!)
+de_results <- data.frame(
+    log2FoldChange = rnorm(ncol(adata)),      # DESeq2 style
+    pvalue = runif(ncol(adata)),
+    padj = runif(ncol(adata)),
+    baseMean = runif(ncol(adata), 100, 10000),
+    lfcSE = runif(ncol(adata), 0.1, 1),
+    row.names = rownames(adata$var)
+)
+
+# Store in varm as DataFrame
+adata$varm[['DE_treated_vs_control']] <- de_results
+
+# Define column roles for this specific DE test (no 'varm' nesting - it's implicit)
+adata$uns$exploreDE$column_roles[['DE_treated_vs_control']] <- list(
+    effect = list('log2FoldChange'),
+    score = list('pvalue', 'padj'),
+    label = list('baseMean', 'lfcSE')
+)
+
+# Initialize de_tests section and store metadata about the DE test
+adata$uns$exploreDE$de_tests <- list(
+    DE_treated_vs_control = list(
+        layer_used = 'vst',
+        factor_used = list('condition'),
+        contrast_formula = 'treated - control',
+        model = 'DESeq2'
+    )
+)
+
+cat(sprintf("DE results stored: %d × %d\n", nrow(de_results), ncol(de_results)))
+de_roles <- adata$uns$exploreDE$column_roles$DE_treated_vs_control
+cat(sprintf("DE effect columns: %s\n",
+    paste(unlist(de_roles$effect), collapse=", ")))
+cat(sprintf("DE score columns: %s\n",
+    paste(unlist(de_roles$score), collapse=", ")))
+```
+
+:::
+
+
+---
+
+## obs and obsm (Samples/Observations)
+
+Sample metadata and experimental design information stored in `obs`.
+
+**Why exploreDE needs this:** PCA plots, sample grouping, and color-coding in visualizations rely on experimental factors. The `factor` role identifies which columns contain experimental conditions (e.g., treatment groups, batches, timepoints) that users can select for coloring plots, while `label` roles provide sample identifiers for plot annotations and data tables.
+
+**Column names are arbitrary**—their roles are defined in application-specific metadata.
+
+Recommended semantic roles:
+
+| Role | Description | Examples |
+|------|-------------|----------|
+| `factor` | Experimental factors (conditions, covariates) | `condition`, `treatment`, `sex`, `batch`, `timepoint`, `genotype` |
+| `label` | Sample identifiers and annotations | `sample_name`, `patient_id`, `barcode`, `QC_status` |
+
+**Example: Adding sample metadata**
+
+::: {.panel-tabset}
+
+## Python
+
+```{python}
+import anndata as ad
+import numpy as np
+import pandas as pd
+
+# Create AnnData with just the matrix (continuing from earlier pattern)
+np.random.seed(789)
+sample_intensities = np.random.lognormal(mean=11, sigma=1.8, size=(60, 20))
+adata_samples = ad.AnnData(X=sample_intensities)
+
+# Build obs DataFrame with all sample metadata
+obs_df = pd.DataFrame({
+    'sample_name': [f'sample_{i:03d}' for i in range(60)],
+    'treatment': ['control', 'treated'] * 30,
+    'batch': [1, 1, 2, 2, 3, 3] * 10,
+    'replicate': list(range(1, 31)) * 2
+}, index=[f'sample_{i:03d}' for i in range(60)])
+
+# Assign to AnnData
+adata_samples.obs = obs_df
+adata_samples.obs.index.name = 'sample_id'
+
+# Define column roles for exploreDE
+adata_samples.uns['exploreDE'] = {
+    'column_roles': {
+        'obs': {
+            'factor': ['treatment', 'batch'],  # REQUIRED
+            'label': ['sample_name', 'replicate']
+        }
+    }
+}
+
+print("Sample metadata columns:")
+for col in adata_samples.obs.columns:
+    print(f"  - {col}")
+obs_roles = adata_samples.uns['exploreDE']['column_roles']['obs']
+print("Factor columns:")
+for col in obs_roles['factor']:
+    print(f"  - {col}")
+```
+
+## R
+
+```{r}
+library(anndataR)
+
+# Create AnnData with just the matrix (continuing from earlier pattern)
+set.seed(789)
+sample_intensities <- matrix(rlnorm(60 * 20, meanlog=11, sdlog=1.8), nrow=60, ncol=20)
+adata_samples <- AnnData(X = sample_intensities)
+
+# Build obs DataFrame with all sample metadata
+obs_df <- data.frame(
+    sample_name = sprintf('sample_%03d', 0:59),
+    treatment = rep(c('control', 'treated'), 30),
+    batch = rep(c(1, 1, 2, 2, 3, 3), 10),
+    replicate = rep(1:30, 2),
+    row.names = sprintf('sample_%03d', 0:59)
+)
+
+# Assign to AnnData
+adata_samples$obs <- obs_df
+
+# Define column roles for exploreDE
+adata_samples$uns[['exploreDE']] <- list(
+    column_roles = list(
+        obs = list(
+            factor = list('treatment', 'batch'),  # REQUIRED
+            label = list('sample_name', 'replicate')
+        )
+    )
+)
+
+cat("Sample metadata columns:\n")
+for (col in colnames(adata_samples$obs)) {
+    cat(sprintf("  - %s\n", col))
+}
+obs_roles <- adata_samples$uns$exploreDE$column_roles$obs
+cat("Factor columns:\n")
+for (col in unlist(obs_roles$factor)) {
+    cat(sprintf("  - %s\n", col))
+}
+```
+
+:::
+
+
+---
+
+## uns (Unstructured Metadata)
+
+Unstructured metadata stored in `adata.uns`.
+
+Required metadata:
+
+- **`exploreDE`**: Application configuration with nested structure:
+  - `column_roles`: Mapping of column names to semantic roles (var, obs, and DE test results).
+  - `de_tests`: Metadata about differential expression tests.
+
+
+**Example: Complete metadata structure**
+
+::: {.panel-tabset}
+
+
+
+## Python
+
+```{python}
+# Verify exploreDE structure (using adata from varm example above)
+print("exploreDE structure:")
+print("  column_roles keys:")
+for key in adata.uns['exploreDE']['column_roles'].keys():
+    print(f"    - {key}")
+print("  de_tests keys:")
+for key in adata.uns['exploreDE']['de_tests'].keys():
+    print(f"    - {key}")
+```
+
+## R
+
+```{r}
+# Verify exploreDE structure (using adata from varm example above)
+cat("exploreDE structure:\n")
+cat("  column_roles keys:\n")
+for (key in names(adata$uns$exploreDE$column_roles)) {
+    cat(sprintf("    - %s\n", key))
+}
+cat("  de_tests keys:\n")
+for (key in names(adata$uns$exploreDE$de_tests)) {
+    cat(sprintf("    - %s\n", key))
+}
+```
+
+:::
+
+
+---
+
+## Column Roles Metadata Structure
+
+Column roles are organized by **location** in the AnnData object:
+
+::: {.panel-tabset}
+
+## Python
+
+
+```{python}
+import anndata as ad
+import numpy as np
+import pandas as pd
+
+# Example: Create AnnData with arbitrary column names
+np.random.seed(42)
+intensities = np.random.lognormal(mean=10, sigma=2, size=(100, 50))
+
+obs = pd.DataFrame({
+    'sample_id': [f'sample_{i:03d}' for i in range(100)],
+    'condition': ['control'] * 50 + ['treated'] * 50,  # No prefix!
+    'batch': np.random.choice(['batch1', 'batch2'], 100)
+}, index=[f'sample_{i:03d}' for i in range(100)])
+
+var = pd.DataFrame({
+    'protein_id': [f'P{i:05d}' for i in range(50)],
+    'description': [f'Protein {i}' for i in range(50)],
+    'gene_symbol': [f'GENE{i}' for i in range(50)]  # No prefix!
+}, index=[f'P{i:05d}' for i in range(50)])
+
+adata = ad.AnnData(X=intensities, obs=obs, var=var)
+adata.obs.index.name = 'sample_id'
+adata.var.index.name = 'protein_id'
+
+# Define column roles for exploreDE (application-specific!)
+adata.uns['exploreDE'] = {
+    'column_roles': {
+        'var': {
+            # Feature-level annotations (shared across all analyses)
+            'description': ['description'],  # REQUIRED by exploreDE!
+            'label': ['gene_symbol', 'protein_id']
+        },
+        'obs': {
+            # Sample-level metadata
+            'factor': ['condition', 'batch'],  # REQUIRED
+            'label': ['sample_id']
+        }
+    }
+}
+
+# Add DE results to demonstrate complete structure
+de_results = pd.DataFrame({
+    'log2FoldChange': np.random.randn(adata.n_vars),
+    'pvalue': np.random.uniform(0, 1, adata.n_vars),
+    'padj': np.random.uniform(0, 1, adata.n_vars)
+}, index=adata.var_names)
+
+adata.varm['DE_treated_vs_control'] = de_results
+
+# Add DE test column roles and metadata
+adata.uns['exploreDE']['column_roles']['DE_treated_vs_control'] = {
+    'effect': ['log2FoldChange'],
+    'score': ['pvalue', 'padj']
+}
+
+adata.uns['exploreDE']['de_tests'] = {
+    'DE_treated_vs_control': {
+        'layer_used': 'X',
+        'factor_used': ['condition'],
+        'contrast_formula': 'treated - control',
+        'model': 'example'
+    }
+}
+
+print(f"Created AnnData: {adata.n_obs} samples × {adata.n_vars} proteins")
+print(f"exploreDE config keys: {list(adata.uns['exploreDE'].keys())}")
+print(f"DE tests: {list(adata.uns['exploreDE']['de_tests'].keys())}")
+```
+
+## R
+
+```{r}
+library(anndataR)
+
+# Example: Create AnnData with arbitrary column names
+set.seed(42)
+intensities <- matrix(rlnorm(100 * 50, meanlog=10, sdlog=2), nrow=100, ncol=50)
+
+obs <- data.frame(
+    sample_id = sprintf('sample_%03d', 0:99),
+    condition = rep(c('control', 'treated'), each=50),  # No prefix!
+    batch = sample(c('batch1', 'batch2'), 100, replace=TRUE),
+    row.names = sprintf('sample_%03d', 0:99)
+)
+
+var <- data.frame(
+    protein_id = sprintf('P%05d', 0:49),
+    description = sprintf('Protein %d', 0:49),
+    gene_symbol = sprintf('GENE%d', 0:49),  # No prefix!
+    row.names = sprintf('P%05d', 0:49)
+)
+
+adata <- AnnData(
+    X = intensities,
+    obs = obs,
+    var = var
+)
+
+# Define column roles for exploreDE (application-specific!)
+adata$uns[['exploreDE']] <- list(
+    column_roles = list(
+        var = list(
+            # Feature-level annotations (shared across all analyses)
+            description = list('description'),  # REQUIRED by exploreDE!
+            label = list('gene_symbol', 'protein_id')
+        ),
+        obs = list(
+            # Sample-level metadata
+            factor = list('condition', 'batch'),  # REQUIRED
+            label = list('sample_id')
+        )
+    )
+)
+
+# Add DE results to demonstrate complete structure
+de_results <- data.frame(
+    log2FoldChange = rnorm(ncol(adata)),
+    pvalue = runif(ncol(adata)),
+    padj = runif(ncol(adata)),
+    row.names = rownames(adata$var)
+)
+
+adata$varm[['DE_treated_vs_control']] <- de_results
+
+# Add DE test column roles and metadata
+adata$uns$exploreDE$column_roles[['DE_treated_vs_control']] <- list(
+    effect = list('log2FoldChange'),
+    score = list('pvalue', 'padj')
+)
+
+adata$uns$exploreDE$de_tests <- list(
+    DE_treated_vs_control = list(
+        layer_used = 'X',
+        factor_used = list('condition'),
+        contrast_formula = 'treated - control',
+        model = 'example'
+    )
+)
+
+cat(sprintf("Created AnnData: %d samples × %d proteins\n", nrow(adata), ncol(adata)))
+cat(sprintf("exploreDE config keys: %s\n", paste(names(adata$uns$exploreDE), collapse=", ")))
+cat(sprintf("DE tests: %s\n", paste(names(adata$uns$exploreDE$de_tests), collapse=", ")))
+```
+
+:::
+
+
+
+
+
+**Key distinctions:**
+
+- **`column_roles['var']`**: Feature-level annotations.
+  - `description`: REQUIRED by *exploreDE* (free-text searchable field).
+  - `label`: Optional identifiers used for filtering.
+- **`column_roles['obs']`**: Sample-level metadata.
+  - `factor`: REQUIRED (at least one experimental factor).
+- **`column_roles['DE_*']`**: DE results per contrast (stored in varm).
+  - `effect`: REQUIRED (fold change column).
+  - `score`: REQUIRED (at least one significance column).
+
+---
+
+## exploreDE Validator
+
+Each tool should provide its own validator to check if an AnnData object meets that tool's specific requirements.
+
+**Implementation**: See `src/omicsbridge/exploreDE_validator.py` for the exploreDE-specific validator.
+
+**What the exploreDE Validator Checks:**
+
+1. **Basic structure**: Is the object an AnnData instance?
+2. **Index uniqueness**: Are observation and variable indices unique?
+3. **Required metadata**: Does `uns['exploreDE']['column_roles']` exist?
+4. **Required sections**: Are `var` and `obs` column roles defined?
+5. **exploreDE-specific requirements**: Is the `description` role defined in `var`? (REQUIRED by exploreDE)
+6. **DE test consistency**: Do referenced DE tests exist in `varm`? Do they have the required `effect` and `score` columns?
+
+**Note:** Other tools like prolfqua would have their own validators checking for different requirements (e.g., hierarchy columns).
+
+**Usage Example:**
+
+```{python}
+# Import the validator (implementation in src/omicsbridge/exploreDE_validator.py)
+from omicsbridge.exploreDE_validator import validate_anndata_omics
+
+# Validate an AnnData object (using adata from earlier examples)
+result = validate_anndata_omics(adata, app_name='exploreDE')
+
+# Check results
+print(f"Validation status: {result['overall_status']}")
+
+if result['errors']:
+    print("\nErrors (must fix):")
+    for error in result['errors']:
+        print(f"  - {error}")
+
+if result['warnings']:
+    print("\nWarnings (recommended to address):")
+    for warning in result['warnings']:
+        print(f"  - {warning}")
+```
+
+**Saving and Loading AnnData Objects:** The standard format for AnnData is HDF5-based `.h5ad` files, which efficiently store all components.
+
+::: {.panel-tabset}
+
+## Python
+
+```{python}
+#| eval: false
+
+# Save AnnData object (includes column_roles metadata)
+adata.write('proteomics_experiment.h5ad')
+
+# Load AnnData object
+adata_loaded = ad.read_h5ad('proteomics_experiment.h5ad')
+
+# Verify exploreDE config was preserved
+print(f"Loaded exploreDE keys: {list(adata_loaded.uns['exploreDE'].keys())}")
+var_roles = adata_loaded.uns['exploreDE']['column_roles']['var']
+print(f"Description column in var: {var_roles['description']}")
+print(f"Label columns in var: {var_roles['label']}")
+```
+
+## R
+
+```{r}
+#| eval: false
+
+# Save AnnData object (includes column_roles metadata)
+adata$write_h5ad('proteomics_experiment_r.h5ad')
+
+# Load AnnData object
+adata_loaded <- read_h5ad('proteomics_experiment_r.h5ad')
+
+# Verify exploreDE config was preserved
+cat(sprintf("Loaded exploreDE keys: %s\n",
+    paste(names(adata_loaded$uns$exploreDE), collapse=", ")))
+var_roles <- adata_loaded$uns$exploreDE$column_roles$var
+cat(sprintf("Description column in var: %s\n",
+    paste(unlist(var_roles$description), collapse=", ")))
+cat(sprintf("Label columns in var: %s\n",
+    paste(unlist(var_roles$label), collapse=", ")))
+```
+
+:::
+
+## ColumnResolver
+
+The `ColumnResolver` class abstracts away column name differences, allowing tools to access data by **semantic role** rather than hard-coded column names. This enables exploreDE to work with data from any source (*MaxQuant*, *DESeq2*, *Spectronaut*, etc.) without modification.
+
+**Implementation**: See `src/omicsbridge/column_resolver.py` (Python) and `docs/R/column_resolver.R` (R) for the full implementation.
+
+**Simple API** (recommended):
+
+- `var(role)`: Get primary column from var
+- `var_all(role)`: Get all columns from var
+- `obs(role)`: Get primary column from obs
+- `obs_all(role)`: Get all columns from obs
+- `de(de_test, role)`: Get primary column from DE test
+- `de_all(de_test, role)`: Get all columns from DE test
+
+**Usage Example**:
+
+::: {.panel-tabset}
+
+## Python
+
+```{python}
+# Import the ColumnResolver (implementation in src/omicsbridge/column_resolver.py)
+from omicsbridge.column_resolver import ColumnResolver
+
+# Create resolver for an AnnData object (using adata from earlier examples)
+resolver = ColumnResolver(adata, app_name='exploreDE')
+
+# Simple, clean API - access columns by semantic role
+desc_col = resolver.var('description')
+factor_cols = resolver.obs_all('factor')
+
+# Works with any DE test, regardless of column names
+effect_col = resolver.de('DE_treated_vs_control', 'effect')
+pval_cols = resolver.de_all('DE_treated_vs_control', 'score')
+
+# Use in visualization code
+print(f"Volcano plot X-axis: {effect_col}")
+print(f"  (column name from upstream tool)")
+print(f"Volcano plot Y-axis: {pval_cols[0]}")
+print(f"  (primary significance column)")
+print(f"All significance columns: {pval_cols}")
+```
+
+## R
+
+```{r}
+# Source the ColumnResolver (implementation in docs/R/column_resolver.R)
+source('R/column_resolver.R')
+
+# Create resolver for an AnnData object (using adata from earlier examples)
+resolver <- ColumnResolver$new(adata, app_name = 'exploreDE')
+
+# Simple, clean API - access columns by semantic role
+desc_col <- resolver$var('description')
+factor_cols <- resolver$obs_all('factor')
+
+# Works with any DE test, regardless of column names
+effect_col <- resolver$de('DE_treated_vs_control', 'effect')
+pval_cols <- resolver$de_all('DE_treated_vs_control', 'score')
+
+# Use in visualization code
+cat(sprintf("Volcano plot X-axis: %s\n", effect_col))
+cat("  (column name from upstream tool)\n")
+cat(sprintf("Volcano plot Y-axis: %s\n", pval_cols[1]))
+cat("  (primary significance column)\n")
+cat(sprintf("All significance columns: %s\n",
+    paste(pval_cols, collapse=", ")))
+```
+
+:::
+
+
+---
+
+# prolfqua Specification
+
+For details on the prolfqua-specific column roles and requirements, see the separate specification document:
+
+**[prolfqua_spec.qmd](prolfqua_spec.qmd)** - AnnData specification for prolfqua
+
+The prolfqua specification covers:
+- Hierarchical proteomics data (peptide→protein)
+- Column roles for `var` and `obs`
+- Annotation file structure for experimental design
+- Integration with prolfquapp
+
+---
+
+# Version History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2025-11-12 | 2.0 | Flexible column annotation with metadata-based roles |
+| 2025-11-12 | 1.0 | Initial AnnData-focused specification |
+
+---
+
+# References
+
+- [AnnData documentation](https://anndata.readthedocs.io/)
+- [Architecture Decision: Column Annotation Strategy](architecture_decision_column_annotation.md)
+- [scanpy documentation](https://scanpy.readthedocs.io/)
+

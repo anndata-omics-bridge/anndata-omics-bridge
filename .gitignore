@@ -160,6 +160,7 @@ Thumbs.db
 
 # Quarto/Document outputs (keep source .qmd, ignore rendered files)
 docs/*.html
+docs/*.html.zip
 docs/*.docx
 docs/*.pdf
 docs/*.tex
