@@ -4,9 +4,6 @@
 
 The **Omics Bridge** project establishes a standardized data format to facilitate multi-step, multi-tool analysis workflows in quantitative omics. The project defines a common data container specification based on *AnnData* that enables seamless data exchange between diverse analysis packages and visualization tools.
 
-**Proteomics Bridge**: This repository (`anndata_proteomics_bridge`) is the proteomics-focused component of the Omics Bridge project. It provides converters from multiple proteomics quantification formats to the AnnData standard. Reference implementations and test data are drawn from the ProteoBench project:
-- Test data: `ProteoBench/test/data/quant`
-- I/O parsers: `projects/ProteoBench/proteobench/io`
 
 ## Key Concepts
 
@@ -24,7 +21,7 @@ Instead of forcing specific column naming conventions, the specification uses **
 ## Project Structure
 
 ```
-anndata_proteomics_bridge/
+anndata_omics_bridge/
 ├── docs/                          # Documentation and specifications
 │   ├── AnnData_Omics_Bridge_spec.qmd  # Main specification (Quarto)
 │   ├── prolfqua_spec.qmd          # prolfqua-specific specification
