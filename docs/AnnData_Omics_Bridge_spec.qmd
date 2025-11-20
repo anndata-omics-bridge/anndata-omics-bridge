@@ -85,13 +85,26 @@ The primary goal is to create **self-sufficient data objects** that carry both:
 
 This self-describing approach allows downstream tools to discover and correctly interpret data without hard-coding assumptions about column names or structure.
 
+## Architectural Approach
+
+The column roles system draws on three well-established software engineering patterns to achieve flexibility and interoperability:
+
+**Database Views Pattern**: The metadata in `uns['<app_name>']['column_roles']` functions like a database view—it defines a semantic layer over the physical column names. Just as database views map underlying table columns to logical names, column roles map arbitrary upstream column names (like `'log2FoldChange'`, `'logFC'`, or `'beta'`) to semantic roles (like `'effect'`). This separation allows the physical schema (actual column names) to vary across data sources while maintaining a stable logical schema (semantic roles) for downstream tools.
+
+**Facade Pattern**: Rather than forcing every downstream tool to implement complex parsers for each upstream format (MaxQuant, Spectronaut, etc.), the metadata layer acts as a **facade**—a simplified interface that hides complexity. Tools query semantic roles (`'effect'`, `'score'`, `'description'`) without needing to know whether the underlying data came from proteomics or genomics, or which specific software generated it.
+
+
+**Adapter Pattern**: The `ColumnResolver` class (detailed in later sections) implements the **Adapter Pattern**, providing a unified API for accessing heterogeneous data. By translating semantic role queries into actual column lookups, it adapts diverse data structures to a common interface, enabling write-once, run-anywhere analysis code.
+
+These patterns work together to create a flexible, maintainable ecosystem where new quantification tools and analysis packages can be added independently without breaking existing integrations.
+
 ## Participating Tools and Packages
 
 The following tools and packages use this standardized format:
 
 - **ezRun**: Workflow management and analysis orchestration
 - **ezPyz**: Python-based quantification and analysis utilities
-- **prolfqua**: Proteomics-focused differential expression and quality control
+- **Bottom-up proteomics workflows**: Hierarchical data aggregation and analysis tools (e.g., prolfqua for peptide-to-protein aggregation and differential expression)
 - **exploreDE**: Interactive visualization and exploration of differential expression results
 - **Mass spectrometry data generators**: Tools that produce quantification outputs from raw MS data
 - **Additional packages**: The specification is designed to be extensible for future tools
@@ -140,7 +153,7 @@ This modular architecture allows interoperability across tools, omics domains, a
 
 ## Contract: "Essential Data" for Tool Interoperability
 
-To make multiple omics tools work on a common container without brittle per-exporter adapters/importers, each downstream tool (*exploreDE*, *prolfquaDE*) that operates on *AnnData* must publish an **essential set** of required data and metadata.
+To make multiple omics tools work on a common container without brittle per-exporter adapters/importers, each downstream tool (*exploreDE*, *bottom-up proteomics workflows*) that operates on *AnnData* must publish an **essential set** of required data and metadata.
 
 The goal is a **minimal, stable contract**: enough information to fully support the tool's features, while **abstaining from non-essential requirements** that complicate *AnnData* creation.
 
@@ -155,8 +168,9 @@ Each tool also implements a validator (function, tool, or script) that allows ea
    - Different applications define their own requirements (e.g., `uns['exploreDE']['column_roles']`), not forced column name prefixes.
    - Optional: Use column prefixes for convenience (auto-discovered if metadata is missing).
 
-3. **Tool-specific contracts**: Each tool (e.g., *exploreDE*, *prolfqua* DE) documents its **essential contract**. Upstream writers and importers target the contract—**not** tool-internal structures—by adding annotations to the *AnnData* object.
+3. **Tool-specific contracts**: Each tool (e.g., *exploreDE* for visualization, *bottom-up proteomics workflows* like prolfqua for hierarchical analysis) documents its **essential contract**. Upstream writers and importers target the contract—**not** tool-internal structures—by adding annotations to the *AnnData* object.
 
+This contract-based design implements the **Facade Pattern**: application-specific metadata (`uns['<app_name>']['column_roles']`) acts as a stable, simplified interface to complex and variable column structures from upstream tools. Instead of each downstream tool maintaining brittle, tool-specific importers for every quantification format (the traditional Adapter approach), the metadata layer provides a single point of abstraction. Data producers write metadata once; data consumers read metadata once. This inverts the traditional integration problem: rather than N×M code paths (N analysis tools × M data formats), we achieve interoperability with N + M implementations (each tool defines its contract, each format writes to contracts).
 
 ---
 
@@ -172,6 +186,30 @@ This approach:
 - Preserves original column names from upstream tools.
 - Enables multi-tool interoperability (each tool defines its own requirements).
 - Optional: Auto-discovers prefixed columns for convenience.
+
+### Conceptual Framework: Database Views
+
+The column roles system works like **database views**: it separates the *physical schema* (actual column names in the data) from the *logical schema* (semantic roles for tools). Just as a database view defines `SELECT effect_size AS fold_change` to map a physical column to a logical name, column roles metadata maps arbitrary upstream column names to standardized semantic roles.
+
+**Concrete example**: Three different differential expression tools produce effect size columns with different names:
+- DESeq2 outputs: `'log2FoldChange'`
+- limma outputs: `'logFC'`
+- Custom tool outputs: `'beta'`
+
+Rather than renaming these columns (modifying the physical schema) or hard-coding parsers for each format, we define a "view" via metadata:
+
+```python
+# DESeq2 data
+adata.uns['exploreDE']['column_roles']['DE_test1'] = {'effect': ['log2FoldChange']}
+
+# limma data
+adata.uns['exploreDE']['column_roles']['DE_test2'] = {'effect': ['logFC']}
+
+# Custom tool data
+adata.uns['exploreDE']['column_roles']['DE_test3'] = {'effect': ['beta']}
+```
+
+Downstream tools (like exploreDE for volcano plots) query the logical schema: "give me the effect size column for this DE test." The metadata layer resolves this to the appropriate physical column name. This view abstraction allows heterogeneous data sources to present a homogeneous interface without data transformation or duplication.
 
 ---
 
@@ -190,7 +228,7 @@ AnnData components:
 
 # exploreDE Specification
 
-This section defines the *exploreDE*-specific requirements for column roles. Other tools (e.g., *prolfqua*) may define different requirements in their own sections.
+This section defines the *exploreDE*-specific requirements for column roles. Other tool categories (e.g., *bottom-up proteomics workflows*) may define different requirements in their own sections.
 
 **About exploreDE:** exploreDE is an interactive data visualization and analysis application for exploring differential expression (DE) results. Developed at the Functional Genomics Center Zurich (FGCZ), it enables researchers to interactively filter, visualize, and export custom figures (volcano plots, heatmaps, PCA plots, pathway visualizations) from DE analysis results generated by upstream tools like SUSHI or prolfquapp. The application needs to work with data from diverse quantification and statistical tools, each with different column naming conventions. **Column roles solve this problem** by providing a semantic mapping layer: instead of hard-coding column names like "log2FoldChange" or "padj", exploreDE queries the metadata to find which columns contain effect sizes, significance scores, sample factors, and feature descriptions—allowing it to work seamlessly with any upstream tool's output.
 
@@ -1000,7 +1038,7 @@ Each tool should provide its own validator to check if an AnnData object meets t
 5. **exploreDE-specific requirements**: Is the `description` role defined in `var`? (REQUIRED by exploreDE)
 6. **DE test consistency**: Do referenced DE tests exist in `varm`? Do they have the required `effect` and `score` columns?
 
-**Note:** Other tools like prolfqua would have their own validators checking for different requirements (e.g., hierarchy columns).
+**Note:** Other tool categories like bottom-up proteomics workflows (e.g., prolfqua) would have their own validators checking for different requirements (e.g., hierarchy columns for peptide-to-protein aggregation).
 
 **Usage Example:**
 
@@ -1075,6 +1113,8 @@ cat(sprintf("Label columns in var: %s\n",
 The `ColumnResolver` class abstracts away column name differences, allowing tools to access data by **semantic role** rather than hard-coded column names. This enables exploreDE to work with data from any source (*MaxQuant*, *DESeq2*, *Spectronaut*, etc.) without modification.
 
 **Implementation**: See `src/omicsbridge/column_resolver.py` (Python) and `docs/R/column_resolver.R` (R) for the full implementation.
+
+**Design Pattern: Adapter**: `ColumnResolver` is a concrete implementation of the **Adapter Pattern**. It adapts the heterogeneous structure of AnnData objects (with arbitrary column names and application-specific metadata) into a uniform, semantic interface. Instead of analysis code directly accessing `adata.var['log2FoldChange']` (which assumes DESeq2 format) or `adata.var['logFC']` (which assumes limma format), code queries `resolver.de('DE_test', 'effect')` and receives the correct column regardless of source. This adapter translates semantic requests (roles) into physical data access (column names), decoupling tool logic from data structure. The result: write-once visualization and analysis code that works across all upstream quantification formats.
 
 **Simple API** (recommended):
 
@@ -1172,5 +1212,6 @@ The prolfqua specification covers:
 
 - [AnnData documentation](https://anndata.readthedocs.io/)
 - [Architecture Decision: Column Annotation Strategy](architecture_decision_column_annotation.md)
+- [Architecture Decision: Tool-Specific Column Roles](adr_tool_specific_views.md) - Justification for application-specific metadata namespaces
 - [scanpy documentation](https://scanpy.readthedocs.io/)
 

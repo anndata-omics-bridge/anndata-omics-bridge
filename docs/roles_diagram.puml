@@ -1,0 +1,386 @@
+@startuml Omics Bridge - Roles and Separation of Concerns
+
+!define ROLE_COLOR #E3F2FD
+!define DATA_COLOR #FFF9C4
+!define METADATA_COLOR #F3E5F5
+!define APP_COLOR #E8F5E9
+
+title Omics Bridge - Roles and Separation of Concerns
+
+' Actors/Roles
+actor "Data Converter" as converter <<Role 1>> ROLE_COLOR
+actor "Metadata Writer" as metadata_writer <<Role 2>> ROLE_COLOR
+actor "Secondary Data\nProducer" as analyst <<Role 3>> ROLE_COLOR
+actor "Application\nDeveloper" as app_dev <<Role 4>> ROLE_COLOR
+actor "End User /\nResearcher" as user <<Role 5>> ROLE_COLOR
+
+' Data/Artifacts
+database "Vendor Files" as vendor_files DATA_COLOR
+package "AnnData Object" as adata {
+    component "X, layers\n(quantification)" as x_layers DATA_COLOR
+    component "obs, var\n(metadata)" as obs_var DATA_COLOR
+    component "varm, obsm\n(results)" as varm_obsm DATA_COLOR
+    component "uns['generic_semantics']\n(OPTIONAL)" as generic_sem METADATA_COLOR
+    component "uns['<app>']['column_roles']\n(REQUIRED)" as tool_metadata METADATA_COLOR
+}
+
+' Applications
+component "exploreDE" as exploreDE APP_COLOR
+component "prolfqua" as prolfqua APP_COLOR
+component "Other Tools" as other_tools APP_COLOR
+
+' Specifications/Contracts
+note right of app_dev
+  **Publishes:**
+  • Application specification
+  • Required column roles
+  • Validator implementation
+  • ColumnResolver usage
+end note
+
+note left of converter
+  **Knowledge:**
+  ✓ Vendor format
+  ✗ NOT application specs
+
+  **Creates:**
+  • AnnData structure
+  • OPTIONAL: generic_semantics
+end note
+
+note left of metadata_writer
+  **Knowledge:**
+  ✓ Application specs
+  ✓ Generic semantics (if present)
+  ✗ NOT vendor format details*
+
+  **Creates:**
+  • uns['<app>']['column_roles']
+
+  *if generic_semantics exists
+end note
+
+note right of analyst
+  **Knowledge:**
+  ✓ Analysis methods
+  ✓ Application specs
+
+  **Creates:**
+  • varm (DE results)
+  • obsm (PCA, etc.)
+  • Column roles for results
+  • Analysis provenance
+end note
+
+' Main Flow
+vendor_files --> converter : "Parse vendor\nformat"
+converter --> x_layers : "Creates"
+converter --> obs_var : "Creates"
+converter ..> generic_sem : "OPTIONAL:\nDocuments\nsemantics"
+
+generic_sem .> metadata_writer : "References\n(if present)"
+metadata_writer --> tool_metadata : "Creates REQUIRED\nmetadata"
+
+adata --> analyst : "Consumes"
+analyst --> varm_obsm : "Adds results"
+analyst --> tool_metadata : "Updates with\nresult metadata"
+
+tool_metadata --> exploreDE : "Consumes via\nColumnResolver"
+tool_metadata --> prolfqua : "Consumes via\nColumnResolver"
+tool_metadata --> other_tools : "Consumes via\nColumnResolver"
+
+app_dev .up.> tool_metadata : "Defines specification\nfor this structure"
+app_dev --> exploreDE : "Implements"
+app_dev --> prolfqua : "Implements"
+
+exploreDE --> user : "Uses"
+prolfqua --> user : "Uses"
+other_tools --> user : "Uses"
+
+' Important constraint
+note on link #FF0000
+  Applications NEVER read
+  generic_semantics!
+
+  Only read their own
+  tool-specific metadata
+end note
+
+@enduml
+
+@startuml Workflow Pattern A - Integrated (Core Facility)
+
+title Pattern A: Integrated Workflow (Core Facility)
+
+participant "Vendor Files" as vendor
+participant "Data Converter +\nMetadata Writer\n(same person)" as converter
+participant "AnnData" as adata
+participant "Applications" as apps
+participant "End User" as user
+
+vendor -> converter : Parse
+activate converter
+
+converter -> adata : Create X, layers, obs, var
+converter -> adata : OPTIONAL: Create generic_semantics
+converter -> adata : Create uns['exploreDE']['column_roles']
+converter -> adata : Create uns['prolfqua']['column_roles']
+
+note right of converter
+  Single person knows:
+  • Vendor format
+  • Downstream applications
+
+  Creates everything in one step
+end note
+
+deactivate converter
+
+adata -> apps : Ready for consumption
+apps -> user : Visualize & analyze
+
+note over adata
+  Analysis-ready AnnData
+  with all required metadata
+end note
+
+@enduml
+
+@startuml Workflow Pattern B - Separated (Generic Converter)
+
+title Pattern B: Separated Workflow (Generic Converter)
+
+participant "Vendor Files" as vendor
+participant "Data Converter" as converter
+participant "AnnData +\ngeneric_semantics" as adata_generic
+participant "Metadata Writer\n(exploreDE)" as writer1
+participant "Metadata Writer\n(prolfqua)" as writer2
+participant "AnnData\n(complete)" as adata_complete
+participant "Applications" as apps
+
+vendor -> converter : Parse
+activate converter
+
+converter -> adata_generic : Create X, layers, obs, var
+converter -> adata_generic : Create uns['generic_semantics']\n(REQUIRED in this pattern)
+
+note right of converter
+  Data Converter knows:
+  • Vendor format
+
+  Does NOT know:
+  • Which applications will be used
+
+  Documents semantics for
+  downstream users
+end note
+
+deactivate converter
+
+adata_generic -> writer1 : Reads generic_semantics
+activate writer1
+writer1 -> adata_generic : Create uns['exploreDE']['column_roles']
+deactivate writer1
+
+adata_generic -> writer2 : Reads generic_semantics
+activate writer2
+writer2 -> adata_complete : Create uns['prolfqua']['column_roles']
+deactivate writer2
+
+note over writer1, writer2
+  Metadata Writers know:
+  • Application specifications
+  • Generic semantics vocabulary
+
+  Do NOT need to know:
+  • Vendor format details
+end note
+
+adata_complete -> apps : Ready for multiple applications
+
+@enduml
+
+@startuml Workflow Pattern C - Parallel Enrichment
+
+title Pattern C: Parallel Enrichment (Collaborative Analysis)
+
+participant "Base AnnData" as base
+participant "DE Analyst" as de_analyst
+participant "GSEA Analyst" as gsea_analyst
+participant "QC Analyst" as qc_analyst
+participant "Complete AnnData" as complete
+participant "Applications" as apps
+
+base -> de_analyst : Load
+activate de_analyst
+de_analyst -> de_analyst : Run differential expression
+de_analyst -> base : Add varm['DE_treated_vs_control']
+de_analyst -> base : Add uns['exploreDE']['column_roles']['DE_*']
+de_analyst -> base : Add uns['exploreDE']['de_tests']['DE_*']
+deactivate de_analyst
+
+base -> gsea_analyst : Load
+activate gsea_analyst
+gsea_analyst -> gsea_analyst : Run enrichment
+gsea_analyst -> base : Add uns['enrichment']
+deactivate gsea_analyst
+
+base -> qc_analyst : Load
+activate qc_analyst
+qc_analyst -> qc_analyst : Compute QC metrics
+qc_analyst -> base : Add var['qc_*'] columns
+qc_analyst -> complete : Add uns['qc_metadata']
+deactivate qc_analyst
+
+note over de_analyst, qc_analyst
+  Multiple analysts work in parallel
+  Each adds:
+  • Their analysis results
+  • Metadata about their analysis
+  • Column roles for consuming tools
+end note
+
+complete -> apps : Ready with multiple analyses
+
+@enduml
+
+@startuml Data Structure and Metadata Relationships
+
+title AnnData Structure - Data vs Metadata
+
+package "AnnData Object" {
+
+    ' Data components
+    rectangle "DATA" #FFF9C4 {
+        component "X\n(primary matrix)" as X
+        component "layers\n(alternative matrices)" as layers
+        component "obs\n(sample metadata)" as obs
+        component "var\n(feature metadata)" as var
+        component "obsm\n(sample-level matrices)" as obsm
+        component "varm\n(feature-level matrices)" as varm
+    }
+
+    ' Metadata components
+    rectangle "METADATA about DATA" #F3E5F5 {
+        component "uns['generic_semantics']\n(optional helper)" as generic
+        component "uns['exploreDE']\n['column_roles']" as exploreDE_meta
+        component "uns['prolfqua']\n['column_roles']" as prolfqua_meta
+        component "uns['exploreDE']\n['de_tests']" as de_tests
+    }
+}
+
+' Created by
+actor "Data Converter" as converter
+actor "Metadata Writer" as metadata_writer
+actor "Secondary Data Producer" as analyst
+actor "Application Developer" as app_dev
+
+' Who creates what
+converter --> X : creates
+converter --> layers : creates
+converter --> obs : creates
+converter --> var : creates
+converter ..> generic : OPTIONAL:\ncreates
+
+metadata_writer --> exploreDE_meta : creates
+metadata_writer --> prolfqua_meta : creates
+
+analyst --> varm : adds to
+analyst --> obsm : adds to
+analyst --> de_tests : adds to
+analyst --> exploreDE_meta : updates
+
+' Who uses what
+generic ..> metadata_writer : references
+exploreDE_meta --> app_dev : "exploreDE\nconsumes"
+prolfqua_meta --> app_dev : "prolfqua\nconsumes"
+
+' Relationships
+exploreDE_meta .down.> var : "maps column names in"
+exploreDE_meta .down.> obs : "maps column names in"
+exploreDE_meta .down.> varm : "maps column names in"
+
+prolfqua_meta .down.> var : "maps column names in"
+prolfqua_meta .down.> obs : "maps column names in"
+
+generic .down.> var : "documents\ncolumns in"
+generic .down.> obs : "documents\ncolumns in"
+
+note right of generic
+  generic_semantics structure:
+  {
+    'var': {
+      'description': 'Protein.Names',
+      'gene_symbol': 'Gene.names'
+    }
+  }
+
+  semantic_role → column_name
+end note
+
+note right of exploreDE_meta
+  Tool-specific column_roles:
+  {
+    'var': {
+      'description': ['Protein.Names'],
+      'label': ['Gene.names']
+    },
+    'DE_test1': {
+      'effect': ['log2FoldChange'],
+      'score': ['pvalue', 'padj']
+    }
+  }
+
+  semantic_role → [column_names]
+end note
+
+note bottom of app_dev
+  Applications use ColumnResolver
+  to access data by semantic role:
+
+  resolver.var('description')
+  → returns 'Protein.Names'
+
+  resolver.de('DE_test1', 'effect')
+  → returns 'log2FoldChange'
+end note
+
+@enduml
+
+@startuml Role Knowledge Matrix
+
+title Knowledge Domains by Role
+
+!procedure $role($name, $vendor, $generic, $appspec, $analysis, $domain)
+|<$name>|
+| Vendor Format | <$vendor> |
+| Generic Semantics | <$generic> |
+| App Specification | <$appspec> |
+| Analysis Methods | <$analysis> |
+| Domain Knowledge | <$domain> |
+!endprocedure
+
+skinparam backgroundColor white
+
+rectangle "Knowledge Matrix" {
+
+    $role("Data Converter", "✓ Required", "✓ Creates", "✗ Not needed", "✗ Not needed", "Minimal")
+
+    $role("Metadata Writer", "✗ Not needed*", "✓ Uses (if present)", "✓ Required", "✗ Not needed", "Minimal")
+
+    $role("Secondary Data Producer", "✗ Not needed", "✗ Not needed", "✓ Required", "✓ Required", "Moderate")
+
+    $role("Application Developer", "✗ Not needed", "✗ Not used", "✓ Defines", "✗ Not needed", "Moderate")
+
+    $role("End User / Researcher", "✗ Not needed", "✗ Not needed", "✗ Not needed", "✗ Not needed", "✓ High")
+}
+
+note bottom
+  * Metadata Writer doesn't need vendor format knowledge
+    IF generic_semantics exists
+
+  ✓ = Knowledge required for this role
+  ✗ = Knowledge NOT needed for this role
+end note
+
+@enduml
