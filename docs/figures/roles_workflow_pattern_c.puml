@@ -1,0 +1,44 @@
+@startuml roles_workflow_pattern_c
+
+title Pattern C: Parallel Enrichment (Collaborative Analysis)
+
+participant "Base AnnData" as base
+participant "DE Analyst" as de_analyst
+participant "GSEA Analyst" as gsea_analyst
+participant "QC Analyst" as qc_analyst
+participant "Complete AnnData" as complete
+participant "Applications" as apps
+
+base -> de_analyst : Load
+activate de_analyst
+de_analyst -> de_analyst : Run differential expression
+de_analyst -> base : Add varm['DE_treated_vs_control']
+de_analyst -> base : Add uns['exploreDE']['column_roles']['DE_*']
+de_analyst -> base : Add uns['exploreDE']['de_tests']['DE_*']
+deactivate de_analyst
+
+base -> gsea_analyst : Load
+activate gsea_analyst
+gsea_analyst -> gsea_analyst : Run enrichment
+gsea_analyst -> base : Add uns['enrichment']
+deactivate gsea_analyst
+
+base -> qc_analyst : Load
+activate qc_analyst
+qc_analyst -> qc_analyst : Compute QC metrics
+qc_analyst -> base : Add var['qc_*'] columns
+qc_analyst -> complete : Add uns['qc_metadata']
+deactivate qc_analyst
+
+note over de_analyst, qc_analyst
+  Multiple analysts work in parallel
+  Each adds:
+  • Their analysis results
+  • Metadata about their analysis
+  • Column roles for consuming tools
+end note
+
+complete -> apps : Ready with multiple analyses
+
+@enduml
+

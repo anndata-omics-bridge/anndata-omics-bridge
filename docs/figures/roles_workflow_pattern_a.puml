@@ -1,0 +1,38 @@
+@startuml roles_workflow_pattern_a
+
+title Pattern A: Integrated Workflow (Core Facility)
+
+participant "Vendor Files" as vendor
+participant "Data Converter +\nMetadata Writer\n(same person)" as converter
+participant "AnnData" as adata
+participant "Applications" as apps
+participant "End User" as user
+
+vendor -> converter : Parse
+activate converter
+
+converter -> adata : Create X, layers, obs, var
+converter -> adata : OPTIONAL: Create generic_semantics
+converter -> adata : Create uns['exploreDE']['column_roles']
+converter -> adata : Create uns['prolfqua']['column_roles']
+
+note right of converter
+  Single person knows:
+  • Vendor format
+  • Downstream applications
+
+  Creates everything in one step
+end note
+
+deactivate converter
+
+adata -> apps : Ready for consumption
+apps -> user : Visualize & analyze
+
+note over adata
+  Analysis-ready AnnData
+  with all required metadata
+end note
+
+@enduml
+

@@ -1,0 +1,30 @@
+@startuml roles_knowledge_matrix
+
+title Knowledge Domains by Role
+
+!procedure $role($name, $vendor, $generic, $appspec, $analysis, $domain)
+| $name | $vendor | $generic | $appspec | $analysis | $domain |
+!endprocedure
+
+skinparam backgroundColor white
+
+package "Knowledge Matrix" {
+    component table [
+        | | **Vendor Format** | **Generic Semantics** | **App Specification** | **Analysis Methods** | **Domain Knowledge** |
+        | **Data Converter** | ✓ Required | ✓ Creates | ✗ Not needed | ✗ Not needed | Minimal |
+        | **Metadata Writer** | ✗ Not needed* | ✓ Uses (if present) | ✓ Required | ✗ Not needed | Minimal |
+        | **Secondary Data Producer** | ✗ Not needed | ✗ Not needed | ✓ Required | ✓ Required | Moderate |
+        | **Application Developer** | ✗ Not needed | ✗ Not used | ✓ Defines | ✗ Not needed | Moderate |
+        | **End User / Researcher** | ✗ Not needed | ✗ Not needed | ✗ Not needed | ✗ Not needed | ✓ High |
+    ]
+}
+
+note bottom of table
+  * Metadata Writer doesn't need vendor format knowledge
+    IF generic_semantics exists
+
+  ✓ = Knowledge required for this role
+  ✗ = Knowledge NOT needed for this role
+end note
+
+@enduml

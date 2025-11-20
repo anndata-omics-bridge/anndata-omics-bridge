@@ -6,6 +6,8 @@
 
 ---
 
+![Roles and Separation of Concerns](figures/roles_and_separation_of_concerns.png)
+
 ## Design Principles
 
 ### 1. Tool-Specific Metadata is REQUIRED and SELF-SUFFICIENT
@@ -282,6 +284,8 @@ def create_volcano_plot(adata, de_test_name):
 
 ## Knowledge Domain Matrix
 
+![Role Knowledge Matrix](figures/roles_knowledge_matrix.png)
+
 | Role | Vendor Format | Generic Semantics | App Specification | Analysis Methods | Domain Knowledge |
 |------|---------------|-------------------|-------------------|------------------|------------------|
 | **Data Converter** | ✓ Required | ✓ Creates (optional) | ✗ Not needed | ✗ Not needed | Minimal |
@@ -297,7 +301,17 @@ def create_volcano_plot(adata, de_test_name):
 ## Data Flow Patterns
 
 
-### Pattern X: Parallel Enrichment
+### Pattern A: Integrated Workflow (Core Facility)
+
+![Workflow Pattern A](figures/roles_workflow_pattern_a.png)
+
+### Pattern B: Separated Workflow (Generic Converter)
+
+![Workflow Pattern B](figures/roles_workflow_pattern_b.png)
+
+### Pattern C: Parallel Enrichment (Collaborative Analysis)
+
+![Workflow Pattern C](figures/roles_workflow_pattern_c.png)
 
 Multiple analysts add different results to same AnnData object.
 

@@ -1,0 +1,103 @@
+@startuml roles_data_structure
+
+title AnnData Structure - Data vs Metadata
+
+package "AnnData Object" {
+
+    ' Data components
+    rectangle "DATA" #FFF9C4 {
+        component "X\n(primary matrix)" as X
+        component "layers\n(alternative matrices)" as layers
+        component "obs\n(sample metadata)" as obs
+        component "var\n(feature metadata)" as var
+        component "obsm\n(sample-level matrices)" as obsm
+        component "varm\n(feature-level matrices)" as varm
+    }
+
+    ' Metadata components
+    rectangle "METADATA about DATA" #F3E5F5 {
+        component "uns['generic_semantics']\n(optional helper)" as generic
+        component "uns['exploreDE']\n['column_roles']" as exploreDE_meta
+        component "uns['prolfqua']\n['column_roles']" as prolfqua_meta
+        component "uns['exploreDE']\n['de_tests']" as de_tests
+    }
+}
+
+' Created by
+actor "Data Converter" as converter
+actor "Metadata Writer" as metadata_writer
+actor "Secondary Data Producer" as analyst
+actor "Application Developer" as app_dev
+
+' Who creates what
+converter --> X : creates
+converter --> layers : creates
+converter --> obs : creates
+converter --> var : creates
+converter ..> generic : OPTIONAL:\ncreates
+
+metadata_writer --> exploreDE_meta : creates
+metadata_writer --> prolfqua_meta : creates
+
+analyst --> varm : adds to
+analyst --> obsm : adds to
+analyst --> de_tests : adds to
+analyst --> exploreDE_meta : updates
+
+' Who uses what
+generic ..> metadata_writer : references
+exploreDE_meta --> app_dev : "exploreDE\nconsumes"
+prolfqua_meta --> app_dev : "prolfqua\nconsumes"
+
+' Relationships
+exploreDE_meta .down.> var : "maps column names in"
+exploreDE_meta .down.> obs : "maps column names in"
+exploreDE_meta .down.> varm : "maps column names in"
+
+prolfqua_meta .down.> var : "maps column names in"
+prolfqua_meta .down.> obs : "maps column names in"
+
+generic .down.> var : "documents\ncolumns in"
+generic .down.> obs : "documents\ncolumns in"
+
+note right of generic
+  generic_semantics structure:
+  {
+    'var': {
+      'description': 'Protein.Names',
+      'gene_symbol': 'Gene.names'
+    }
+  }
+
+  semantic_role → column_name
+end note
+
+note right of exploreDE_meta
+  Tool-specific column_roles:
+  {
+    'var': {
+      'description': ['Protein.Names'],
+      'label': ['Gene.names']
+    },
+    'DE_test1': {
+      'effect': ['log2FoldChange'],
+      'score': ['pvalue', 'padj']
+    }
+  }
+
+  semantic_role → [column_names]
+end note
+
+note bottom of app_dev
+  Applications use ColumnResolver
+  to access data by semantic role:
+
+  resolver.var('description')
+  → returns 'Protein.Names'
+
+  resolver.de('DE_test1', 'effect')
+  → returns 'log2FoldChange'
+end note
+
+@enduml
+

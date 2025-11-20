@@ -29,7 +29,9 @@ anndata_omics_bridge/
 │   │   └── column_resolver.R      # R implementation of ColumnResolver
 │   ├── deprecated/                # Archived old versions
 │   ├── render.sh                  # Quarto rendering script
-│   ├── omics_data_flow.png        # Workflow diagram
+│   ├── figures/                   # Diagrams and figures
+│   │   ├── omics_data_flow.png    # Workflow diagram
+│   │   └── ...                    # Other figures
 │   └── architecture_decision_column_annotation.md
 ├── src/omicsbridge/               # Python package
 │   ├── __init__.py                # Package exports

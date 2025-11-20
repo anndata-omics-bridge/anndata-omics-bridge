@@ -1,0 +1,54 @@
+@startuml roles_workflow_pattern_b
+
+title Pattern B: Separated Workflow (Generic Converter)
+
+participant "Vendor Files" as vendor
+participant "Data Converter" as converter
+participant "AnnData +\ngeneric_semantics" as adata_generic
+participant "Metadata Writer\n(exploreDE)" as writer1
+participant "Metadata Writer\n(prolfqua)" as writer2
+participant "AnnData\n(complete)" as adata_complete
+participant "Applications" as apps
+
+vendor -> converter : Parse
+activate converter
+
+converter -> adata_generic : Create X, layers, obs, var
+converter -> adata_generic : Create uns['generic_semantics']\n(REQUIRED in this pattern)
+
+note right of converter
+  Data Converter knows:
+  • Vendor format
+
+  Does NOT know:
+  • Which applications will be used
+
+  Documents semantics for
+  downstream users
+end note
+
+deactivate converter
+
+adata_generic -> writer1 : Reads generic_semantics
+activate writer1
+writer1 -> adata_generic : Create uns['exploreDE']['column_roles']
+deactivate writer1
+
+adata_generic -> writer2 : Reads generic_semantics
+activate writer2
+writer2 -> adata_complete : Create uns['prolfqua']['column_roles']
+deactivate writer2
+
+note over writer1, writer2
+  Metadata Writers know:
+  • Application specifications
+  • Generic semantics vocabulary
+
+  Do NOT need to know:
+  • Vendor format details
+end note
+
+adata_complete -> apps : Ready for multiple applications
+
+@enduml
+

@@ -1,0 +1,110 @@
+@startuml roles_and_separation_of_concerns
+
+!define ROLE_COLOR #E3F2FD
+!define DATA_COLOR #FFF9C4
+!define METADATA_COLOR #F3E5F5
+!define APP_COLOR #E8F5E9
+
+title Omics Bridge - Roles and Separation of Concerns
+
+' Actors/Roles
+actor "Data Converter" as converter <<Role 1>> ROLE_COLOR
+actor "Metadata Writer" as metadata_writer <<Role 2>> ROLE_COLOR
+actor "Secondary Data\nProducer" as analyst <<Role 3>> ROLE_COLOR
+actor "Application\nDeveloper" as app_dev <<Role 4>> ROLE_COLOR
+actor "End User /\nResearcher" as user <<Role 5>> ROLE_COLOR
+
+' Data/Artifacts
+database "Vendor Files" as vendor_files DATA_COLOR
+package "AnnData Object" as adata {
+    component "X, layers\n(quantification)" as x_layers DATA_COLOR
+    component "obs, var\n(metadata)" as obs_var DATA_COLOR
+    component "varm, obsm\n(results)" as varm_obsm DATA_COLOR
+    component "uns['generic_semantics']\n(OPTIONAL)" as generic_sem METADATA_COLOR
+    component "uns['<app>']['column_roles']\n(REQUIRED)" as tool_metadata METADATA_COLOR
+}
+
+' Applications
+component "exploreDE" as exploreDE APP_COLOR
+component "prolfqua" as prolfqua APP_COLOR
+component "Other Tools" as other_tools APP_COLOR
+
+' Specifications/Contracts
+note right of app_dev
+  **Publishes:**
+  • Application specification
+  • Required column roles
+  • Validator implementation
+  • ColumnResolver usage
+end note
+
+note left of converter
+  **Knowledge:**
+  ✓ Vendor format
+  ✗ NOT application specs
+
+  **Creates:**
+  • AnnData structure
+  • OPTIONAL: generic_semantics
+end note
+
+note left of metadata_writer
+  **Knowledge:**
+  ✓ Application specs
+  ✓ Generic semantics (if present)
+  ✗ NOT vendor format details*
+
+  **Creates:**
+  • uns['<app>']['column_roles']
+
+  *if generic_semantics exists
+end note
+
+note right of analyst
+  **Knowledge:**
+  ✓ Analysis methods
+  ✓ Application specs
+
+  **Creates:**
+  • varm (DE results)
+  • obsm (PCA, etc.)
+  • Column roles for results
+  • Analysis provenance
+end note
+
+' Main Flow
+vendor_files --> converter : "Parse vendor\nformat"
+converter --> x_layers : "Creates"
+converter --> obs_var : "Creates"
+converter ..> generic_sem : "OPTIONAL:\nDocuments\nsemantics"
+
+generic_sem .> metadata_writer : "References\n(if present)"
+metadata_writer --> tool_metadata : "Creates REQUIRED\nmetadata"
+
+adata --> analyst : "Consumes"
+analyst --> varm_obsm : "Adds results"
+analyst --> tool_metadata : "Updates with\nresult metadata"
+
+tool_metadata --> exploreDE : "Consumes via\nColumnResolver"
+tool_metadata --> prolfqua : "Consumes via\nColumnResolver"
+tool_metadata --> other_tools : "Consumes via\nColumnResolver"
+
+app_dev .up.> tool_metadata : "Defines specification\nfor this structure"
+app_dev --> exploreDE : "Implements"
+app_dev --> prolfqua : "Implements"
+
+exploreDE --> user : "Uses"
+prolfqua --> user : "Uses"
+other_tools --> user : "Uses"
+
+' Important constraint
+note on link #FF0000
+  Applications NEVER read
+  generic_semantics!
+
+  Only read their own
+  tool-specific metadata
+end note
+
+@enduml
+

@@ -11,6 +11,8 @@
 
 AnnData (Annotated Data) is a Python package for handling annotated data matrices. It's the core data structure of the scverse ecosystem (scanpy, scvi-tools, squidpy, etc.) and is widely used for single-cell analysis, but works for any matrix data with annotations.
 
+![AnnData Structure](figures/roles_data_structure.png)
+
 **Key concept**: Store a data matrix `X` (observations × variables) with:
 - **obs**: Metadata about observations (rows) - e.g., cells, samples
 - **var**: Metadata about variables (columns) - e.g., genes, features
