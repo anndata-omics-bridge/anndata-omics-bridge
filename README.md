@@ -20,9 +20,14 @@ Each application (exploreDE, prolfqua, etc.) defines its own metadata namespace 
 
 ## Documentation
 
-- **[Main Specification](docs/AnnData_Omics_Bridge_spec.qmd)**: Complete specification with examples
-- **[Roles and Separation of Concerns](docs/roles_and_separation_of_concerns.md)**: Workflow architecture and responsibilities
-- **[Architecture Decisions](docs/adr_tool_specific_views.md)**: Design rationale
+- **[Tool-specific views ADR](docs/adr_tool_specific_views.md)** — authoritative decision: per-tool `uns['<app_name>']['column_roles']`
+- **[Roles and separation of concerns](docs/roles_and_separation_of_concerns.md)** — workflow architecture and responsibilities
+- **[Naming conventions](docs/conventions.md)** — sanitisation rules for `obs`/`var`/layer column names
+- **[Proteomics rationale](docs/proteomics_rationale.md)** — why AnnData for proteomics (ProteoBench / prolfquapp context)
+- **[Main specification](docs/AnnData_Omics_Bridge_spec.qmd)** — complete spec with examples (Quarto, renders to HTML/PDF)
+- **[AnnData API reference](docs/anndata_api_reference.md)** — cheat sheet for the AnnData library
+
+Implementation: tool-specific converters live in [anndata_proteomics_bridge](../anndata_proteomics_bridge/).
 
 ## Status
 
