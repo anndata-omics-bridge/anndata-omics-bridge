@@ -1,22 +1,22 @@
 # AnnData Omics Bridge
 
-A standardized data format specification for multi-tool omics analysis workflows. Defines a common [AnnData](https://anndata.readthedocs.io/)-based container that enables seamless integration between quantification tools, statistical analysis packages, and visualization applications.
+This repository contains the format specification for representing quantitative omics results in [AnnData](https://anndata.readthedocs.io/). It defines how converters and analysis tools record the roles of source columns without renaming those columns.
 
-## The Challenge
+## Problem
 
-Omics workflows involve multiple tools with different column naming conventions and data structures. MaxQuant uses `Protein.Names`, DESeq2 outputs `log2FoldChange`, limma outputs `logFC`. Integrating these tools traditionally requires brittle, tool-specific adapters.
+Omics tools use different column names and data structures. For example, MaxQuant uses `Protein.Names`, DESeq2 uses `log2FoldChange`, and limma uses `logFC`. Connecting these outputs requires tool-specific parsing and column mappings.
 
-## Our Approach
+## Design
 
-**Metadata-driven semantics**: Instead of forcing standardized column names, we preserve original names and use application-specific metadata to map columns to semantic roles. This separates the physical data structure from the logical interpretation, allowing tools to evolve independently while maintaining interoperability.
+Column names remain as reported by the source tool. Application-specific metadata maps those columns to roles needed by a consumer.
 
-Each application (exploreDE, prolfqua, etc.) defines its own metadata namespace specifying which columns it needs. Data converters and analysis workflows populate this metadata, creating self-describing data objects that work across the entire tool ecosystem.
+Each application, such as exploreDE or prolfqua, defines a metadata namespace for the columns it uses. Data converters and analysis workflows populate that mapping.
 
-## Key Design Principles
+## Column-role rules
 
-- **Tool-specific metadata is required and self-sufficient**: Each application has its own namespace
-- **Generic semantics are optional helpers**: Data converters may document vendor format semantics to aid downstream metadata creation
-- **Minimal interface contracts**: Tools specify only essential requirements, reducing integration burden
+- Each application has its own complete namespace under `uns['<app_name>']['column_roles']`.
+- Generic semantic annotations are optional.
+- Each consumer declares only the columns it requires.
 
 ## Documentation
 
@@ -27,8 +27,12 @@ Each application (exploreDE, prolfqua, etc.) defines its own metadata namespace 
 - **[Main specification](docs/AnnData_Omics_Bridge_spec.qmd)** — complete spec with examples (Quarto, renders to HTML/PDF)
 - **[AnnData API reference](docs/anndata_api_reference.md)** — cheat sheet for the AnnData library
 
-Implementation: tool-specific converters live in [anndata_proteomics_bridge](../anndata_proteomics_bridge/).
+Implementation: the current proteomics converter is [APB2](https://github.com/anndata-omics-bridge/apb2).
 
 ## Status
 
 Active development - specification and architecture under refinement.
+
+## FGCZ context
+
+The [Functional Genomics Center Zurich (FGCZ)](https://fgcz.ch/service_and_support/bioinformatics_services.html) supports genomics, transcriptomics, proteomics, metabolomics/lipidomics, and other omics data. AnnData is already used on the genomics side. Proteomics results still arrive as tool-specific tables, so downstream applications need parsers and column mappings for each upstream tool. This repository records the data model used for those mappings. Support for metabolomics data is planned.
