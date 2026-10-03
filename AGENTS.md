@@ -2,7 +2,7 @@
 
 Documentation repo for the Omics Bridge — a standardised AnnData-based interchange format for multi-tool quantitative omics workflows.
 
-This repo also ships a small Python package, `omicsbridge`, with the `ColumnResolver` and validators referenced from the spec. Tool-specific converters (DIA-NN, MaxQuant, Spectronaut, …) live in the sibling repo [anndata_proteomics_bridge](../anndata_proteomics_bridge/).
+This repo also ships a small Python package, `omicsbridge`, with the `ColumnResolver` and validators referenced from the spec. Tool-specific converters (DIA-NN, MaxQuant, Spectronaut, …) live in the sibling repo [apb2](../apb2/).
 
 ## Key design
 
@@ -23,7 +23,7 @@ Tool requirements are declared **per tool** in `uns['<app_name>']['column_roles'
 
 - Create env: `uv venv` then `source .venv/bin/activate`
 - Install: `uv pip install -e ".[dev]"`
-- Format: `black src/ tests/` (line length 100) or `ruff format src/ tests/`
+- Format: `black src/ tests/` (line length 100)
 - Lint: `ruff check src/ tests/`
 - Type check: `mypy src/`
 - Tests: `pytest` or `pytest --cov=omicsbridge`
