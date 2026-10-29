@@ -65,7 +65,8 @@
 [project]
 name = "omicsbridge"
 version = "0.1.0"
-description = "A bridge for converting between AnnData and SummarizedExperiment formats"
+description = "Legacy specification and validators for omics results in AnnData"
+license = "CC-BY-4.0"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

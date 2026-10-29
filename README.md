@@ -31,7 +31,7 @@ Implementation: the current proteomics converter is [APB2](https://github.com/an
 
 ## Status
 
-Active development - specification and architecture under refinement.
+Legacy: this specification predates the APB packages and is no longer developed. Current behaviour is defined by [APB2](https://github.com/anndata-omics-bridge/apb2) (conversion, metadata under `uns["apb"]`), [apb-catalog](https://github.com/anndata-omics-bridge/apb-catalog) (what result fields mean) and [apb-export](https://github.com/anndata-omics-bridge/apb-export) (consumer-specific exports, including exploreDE and prolfqua). Where this repository and those packages differ, the packages are authoritative.
 
 ## FGCZ context
 
